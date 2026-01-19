@@ -1,0 +1,7 @@
+fastapi[standard]
+langchain
+langchain-openai
+langchain-qdrant
+qdrant-client
+python-dotenv
+uvicorn
