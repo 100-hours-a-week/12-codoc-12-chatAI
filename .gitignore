@@ -22,3 +22,6 @@ ENV/
 
 # VS Code 설정
 .vscode/
+
+# Copilot 설정 파일
+.copilot/
