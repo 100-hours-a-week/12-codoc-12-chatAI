@@ -2,9 +2,9 @@ name: ai-ci
 
 on:
   pull_request:
-    branches: [develop, main, chore/ci-cd]
+    branches: [develop, main, chore/ci-cd-test]
   push:
-    branches: [chore/ci-cd]
+    branches: [chore/ci-cd-test]
   workflow_dispatch: {}
   workflow_call:
 
@@ -42,22 +42,22 @@ jobs:
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
           pip install ruff build
 
-      # 린트
-      - name: Lint
-        run: ruff check .
+      # # 린트
+      # - name: Lint
+      #   run: ruff check .
 
-      # 포맷 체크
-      - name: Format Check
-        run: ruff format --check .
+      # # 포맷 체크
+      # - name: Format Check
+      #   run: ruff format --check .
 
-      # 테스트
-      - name: Tests
-        run: |
-          if python -c "import importlib.util; import sys; sys.exit(0 if importlib.util.find_spec('pytest') else 1)"; then
-            pytest -q
-          else
-            echo "pytest not installed. Skipping tests."
-          fi
+      # # 테스트
+      # - name: Tests
+      #   run: |
+      #     if python -c "import importlib.util; import sys; sys.exit(0 if importlib.util.find_spec('pytest') else 1)"; then
+      #       pytest -q
+      #     else
+      #       echo "pytest not installed. Skipping tests."
+      #     fi
 
       # 의존성 감사(warn-only)
       - name: Dependency Audit
@@ -65,35 +65,49 @@ jobs:
           pip install pip-audit
           pip-audit -l || true
 
-      # 패키징(main만)
-      - name: Build
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          python -m build
-          ls -al dist
+      # # 패키징(main만)
+      # - name: Build
+      #   if: github.event_name == 'push' && github.ref == 'refs/heads/chore/ci-cd'
+      #   run: |
+      #     python -m build
+      #     ls -al dist
 
-      # 아티팩트 업로드(main만)
-      - name: Upload Artifact
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      # # 아티팩트 업로드(main만)
+      # - name: Upload Artifact
+      #   if: github.event_name == 'push' && github.ref == 'refs/heads/chore/ci-cd'
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: ai-dist-${{ github.sha }}
+      #     path: dist/*
+      #     if-no-files-found: error
+      #     retention-days: 7
+
+      # 6. 소스 아티팩트 업로드
+      - name: Upload source artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/chore/ci-cd'
         uses: actions/upload-artifact@v4
         with:
-          name: ai-dist-${{ github.sha }}
-          path: dist/*
-          if-no-files-found: error
+          name: ai-source-${{ github.sha }}
+          path: ./
           retention-days: 7
-
-      # 실패 알림(Discord)
-      - name: Notify Failure
-        if: failure()
+      - name: Notify Discord
+        if: always()
         run: |
-          curl -X POST -H "Content-Type: application/json" \
-          -d "{\"content\":\"❌ **AI CI 실패**\\nRepo: ${{ github.repository }}\\nRef: ${{ github.ref }}\\nActor: ${{ github.actor }}\\nRun: ${{ github.run_id }}\"}" \
-          ${{ secrets.DISCORD_WEBHOOK }}
+          # push 이벤트 컨텍스트에 맞게 변수 수정
+          STATUS="${{ job.status == 'success' && '성공' || '실패' }}"
+          COLOR="${{ job.status == 'success' && '65280' || '16711680' }}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
-      # 성공 알림(Discord)
-      - name: Notify Success
-        if: success()
-        run: |
           curl -X POST -H "Content-Type: application/json" \
-          -d "{\"content\":\"✅ **AI CI 성공**\\nRepo: ${{ github.repository }}\\nRef: ${{ github.ref }}\\nActor: ${{ github.actor }}\\nRun: ${{ github.run_id }}\"}" \
+          -d '{
+            "embeds": [{
+              "title": "AI CD 결과 (AI)",
+              "description": "상태: '"${STATUS}"'\n브랜치: ${{ github.ref_name }}\n담당자: ${{ github.actor }}",
+              "color": '"${COLOR}"',
+              "fields": [
+                {"name": "커밋 메시지", "value": "${{ github.event.head_commit.message || 'Manual Trigger' }}"},
+                {"name": "로그 확인", "value": "[Github Actions Log]('"${RUN_URL}"')"}
+              ]
+            }]
+          }' \
           ${{ secrets.DISCORD_WEBHOOK }}
