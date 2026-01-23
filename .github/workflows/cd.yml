@@ -1,0 +1,68 @@
+name: ai-cd
+
+on:
+  push:
+    branches: [chore/ci-cd] # dev 브랜치 푸시 시 자동 배포
+  workflow_dispatch: {} # 수동 실행 허용
+
+permissions:
+  contents: read # 레포 읽기 권한
+
+concurrency:
+  group: ai-cd-${{ github.workflow }}-${{ github.ref }} # 중복 배포 방지
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/ai-ci.yml
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download AI Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ai-wheel # CI에서 생성한 wheel
+          path: ./artifact # 임시 저장
+
+      - name: Upload AI Artifact to Server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.AI_HOST }} # AI 서버 주소
+          username: ${{ secrets.DEPLOY_USER }} # 배포 계정
+          key: ${{ secrets.SSH_PRIVATE_KEY }} # SSH 키
+          source: "artifact/*.whl" # 전송 대상 wheel
+          target: "/home/ubuntu/ai/incoming" # 서버 수신 디렉터리
+          strip_components: 1
+
+      - name: Execute AI Deploy Script
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.AI_HOST }} # AI 서버 접속
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            chmod +x /home/ubuntu/ai/deploy.sh # 실행 권한 부여
+            bash /home/ubuntu/ai/deploy.sh "${{ secrets.MODEL_API_KEY }}" # 배포 실행
+
+      - name: Notify Discord
+        if: always() # 항상 알림
+        run: |
+          STATUS="${{ job.status == 'success' && '성공' || '실패' }}"
+          COLOR="${{ job.status == 'success' && '65280' || '16711680' }}"
+
+          curl -X POST -H "Content-Type: application/json" \
+          -d '{
+            "embeds": [{
+              "title": "AI 배포 알림",
+              "description": "**상태**: '"$STATUS"'\n**브랜치**: ${{ github.ref_name }}\n**담당자**: ${{ github.actor }}",
+              "color": '"$COLOR"',
+              "fields": [{
+                "name": "로그 확인",
+                "value": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+              }]
+            }]
+          }' \
+          ${{ secrets.DISCORD_WEBHOOK }}         # 디스코드 알림 전송
