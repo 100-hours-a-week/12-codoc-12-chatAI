@@ -1,0 +1,74 @@
+from fastapi import APIRouter, BackgroundTasks
+from fastapi.responses import StreamingResponse
+from app.common.config import llm
+from app.common.api_response import CommonResponse
+from . import bot_schemas
+from typing import Dict, Any
+from enum import Enum
+import asyncio
+
+
+router = APIRouter(prefix="/chatbot", tags=["chatbot"])
+
+class WorkflowStatus(str, Enum):
+    ACCEPTED = "ACCEPTED"
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELED = "CANCELED"
+    
+# 실행 중인 워크 플로우 상태 저장 -> 실제론 DB 사용
+workflow_status: Dict[str, Dict[str, Any]] = {}
+
+async def execute_langgraph_workflow(run_id: int, request:bot_schemas.UserMsgCreateReq):
+    # 여기에 LangGraph 워크플로우 실행 로직을 구현합니다.
+    # 예시로, run_id와 request 데이터를 사용하여 워크플로우를 실행한다고 가정합니다.
+    # 실제 구현은 LangGraph의 API 또는 SDK를 사용하여 작성해야 합니다.
+    
+    try:
+        workflow_status[run_id]["status"] = WorkflowStatus.PROCESSING
+        
+        # LangGraph 워크플로우 실행 로직 추가
+        
+        workflow_status[run_id]["status"] = WorkflowStatus.COMPLETED
+        workflow_status[run_id]["result"] = "작업 완료"
+
+    except asyncio.CancelledError:
+        workflow_status[run_id]["status"] = WorkflowStatus.CANCELED
+    except Exception as e:
+        workflow_status[run_id]["status"] = WorkflowStatus.FAILED
+        workflow_status[run_id]["error"] = str(e)
+
+@router.post("", response_model=CommonResponse[bot_schemas.UserMsgCreateRes])
+async def chat(
+    post : bot_schemas.UserMsgCreateReq,
+    background_tasks : BackgroundTasks
+)-> CommonResponse[Dict[str, Any]]:
+    # 메세지 받고 백그라운드에서 워크플로우 실행
+    
+    run_id = post.run_id
+    
+    workflow_status[run_id] = {
+        "status": WorkflowStatus.ACCEPTED,
+        "user_id" : post.user_id,
+        "problem_id" : post.problem_id
+    }   
+
+    background_tasks.add_task(execute_langgraph_workflow, run_id, post)
+    
+    return CommonResponse.success_response(
+        message="채팅 요청이 접수되었습니다.",
+        data=bot_schemas.UserMsgCreateRes(
+            run_id=run_id,
+            status=WorkflowStatus.ACCEPTED
+        )
+    )
+
+@router.get("/test-chat")
+async def test_chat(prompt: str = "DFS 알고리즘이 뭐야?"):
+    async def generate():
+        async for chunk in llm.astream(prompt):
+            yield f"data: {chunk.text}\n\n"
+        yield "data: [DONE]\n\n"
+        
+    return StreamingResponse(generate(), media_type="text/event-stream")

@@ -1,4 +1,4 @@
-from app.common.exceptions.BaseException import BusinessException
+from app.common.exceptions.base_exception import BusinessException
 
 # 401: 인증 실패 (토큰 없음, 만료 등)
 class CredentialException(BusinessException):

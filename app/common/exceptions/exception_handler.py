@@ -1,9 +1,10 @@
 from fastapi import Request, FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from pydantic import ValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from app.common.exceptions.BaseException import BusinessException
-from common.apiResponse import CommonResponse
+from app.common.exceptions.base_exception import BusinessException
+from app.common.api_response import CommonResponse
 
 def register_exception_handlers(app: FastAPI):
     
@@ -25,10 +26,22 @@ def register_exception_handlers(app: FastAPI):
             status_code=422,
             content=CommonResponse.fail_response(
                 code="VALIDATION_ERROR",
-                message="Validation failed",
+                message="요청 데이터 형식이 올바르지 않습니다.",
                 data=exc.errors()
             ).model_dump()
         )
+        
+    @app.exception_handler(ValidationError)
+    async def validation_error_handler(request: Request, exc: ValidationError):
+    # 애플리케이션 로직에서 모델 검증 실패
+        return JSONResponse(
+            status_code=400,
+            content=CommonResponse.fail_response(
+                code="VALIDATION_ERROR",
+                message="데이터 검증 실패",
+                data=exc.errors()
+        ).model_dump()
+    )
 
     # 그 외 서버 내부 에러(500)
     @app.exception_handler(Exception)
