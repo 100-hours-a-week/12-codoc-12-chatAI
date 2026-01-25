@@ -6,6 +6,7 @@ from . import bot_schemas
 from typing import Dict, Any
 from enum import Enum
 import asyncio
+import json
 
 
 router = APIRouter(prefix="/chatbot", tags=["chatbot"])
@@ -51,7 +52,8 @@ async def chat(
     workflow_status[run_id] = {
         "status": WorkflowStatus.ACCEPTED,
         "user_id" : post.user_id,
-        "problem_id" : post.problem_id
+        "problem_id" : post.problem_id,
+        "prompt" : post.user_message
     }   
 
     background_tasks.add_task(execute_langgraph_workflow, run_id, post)
@@ -64,11 +66,46 @@ async def chat(
         )
     )
 
-@router.get("/test-chat")
-async def test_chat(prompt: str = "DFS 알고리즘이 뭐야?"):
+@router.get("/{run_id}/stream", response_model=CommonResponse[Dict[str, Any]])
+async def get_chat_stream(run_id: int):
+    
+    if run_id not in workflow_status:
+        return StreamingResponse(
+            content=iter([
+                f'event: error\ndata: {json.dumps({"code": "NOT_FOUND", "message": "워크플로우를 찾을 수 없습니다."}, ensure_ascii=False)}\n\n'
+            ]),
+            media_type="text/event-stream"
+        )
+        
     async def generate():
-        async for chunk in llm.astream(prompt):
-            yield f"data: {chunk.text}\n\n"
-        yield "data: [DONE]\n\n"
+        yield f'event: status\ndata: {json.dumps({"code": "SUCCESS", "message": "OK", "result": {"status": WorkflowStatus.PROCESSING, "message": "작업 처리 중..."}}, ensure_ascii=False)}\n\n'
+    
+        try:
+            accumulated_text = ""    
+            async for chunk in llm.astream(workflow_status[run_id].get("prompt", "")):
+                if workflow_status[run_id]["status"] == WorkflowStatus.CANCELED:
+                        yield f'event: error\ndata: {json.dumps({"code": "CANCELED", "message": "작업이 취소되었습니다."}, ensure_ascii=False)}\n\n'
+                        break
+                    
+                token_text = chunk.text
+                accumulated_text += token_text
+                
+                yield f'event: token\ndata: {json.dumps({"code": "SUCCESS", "message": "OK", "result": {"text": token_text}}, ensure_ascii=False)}\n\n'
+                
+            final_response = {
+                "status": WorkflowStatus.COMPLETED,
+                "ai_message": accumulated_text,
+                "current_node": workflow_status[run_id].get("current_node", ""),
+                 "is_correct": workflow_status[run_id].get("is_correct", False),
+                "current_answer": workflow_status[run_id].get("current_answer", "")
+            }
+            yield f'event: final\ndata: {json.dumps({"code": "SUCCESS", "message": "OK", "result": final_response}, ensure_ascii=False)}\n\n'
+        
+        except Exception as e:
+            workflow_status[run_id]["status"] = WorkflowStatus.FAILED
+            workflow_status[run_id]["error"] = str(e)
+            yield f'event: error\ndata: {json.dumps({"code": "FAILED", "message": str(e)}, ensure_ascii=False)}\n\n'
         
     return StreamingResponse(generate(), media_type="text/event-stream")
+
+# 워크플로우 취소 API 엔드포인트 추가
