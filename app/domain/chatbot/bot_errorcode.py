@@ -1,4 +1,4 @@
-from app.common.exceptions.BaseException import BusinessException
+from app.common.exceptions.base_exception import BusinessException
 
 # [400] 사용자 입력 관련 에러
 class EmptyPromptException(BusinessException):
