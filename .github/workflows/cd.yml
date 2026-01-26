@@ -2,7 +2,7 @@ name: ai-cd
 
 on:
   push:
-    branches: [chore/ci-cd]
+    branches: [main, dev]
   workflow_dispatch:
 
 permissions:
