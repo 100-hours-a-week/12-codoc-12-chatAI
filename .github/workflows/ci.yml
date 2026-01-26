@@ -90,24 +90,36 @@ jobs:
           name: ai-source-${{ github.sha }}
           path: ./
           retention-days: 7
-      - name: Notify Discord
+      - name: Notify Discord (always)
         if: always()
         run: |
-          # push 이벤트 컨텍스트에 맞게 변수 수정
-          STATUS="${{ job.status == 'success' && '성공' || '실패' }}"
-          COLOR="${{ job.status == 'success' && '65280' || '16711680' }}"
-          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          BRANCH="${{ github.ref_name }}"
+          EVENT="${{ github.event_name }}"
+          ACTOR="${{ github.actor }}"
+          SHA="${{ github.sha }}"
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          if [ -z "$COMMIT_MSG" ]; then
+            COMMIT_MSG="(커밋 메시지를 이벤트에서 가져올 수 없음)"
+          fi
+          COMMIT_MSG_ESCAPED="$(printf '%s' "$COMMIT_MSG" | sed 's/\\/\\\\/g; s/\"/\\\"/g')"
+          if [ "${{ job.status }}" = "success" ]; then
+            STATUS="성공"
+            COLOR="65280"
+          else
+            STATUS="실패"
+            COLOR="16711680"
+          fi
           curl -X POST -H "Content-Type: application/json" \
-          -d '{
-            "embeds": [{
-              "title": "AI CI 결과 (AI)",
-              "description": "상태: '"${STATUS}"'\n브랜치: ${{ github.ref_name }}\n담당자: ${{ github.actor }}",
-              "color": '"${COLOR}"',
-              "fields": [
-                {"name": "커밋 메시지", "value": "${{ github.event.head_commit.message || 'Manual Trigger' }}"},
-                {"name": "로그 확인", "value": "[Github Actions Log]('"${RUN_URL}"')"}
+          -d "{
+            \"embeds\": [{
+              \"title\": \"[AI] CI 결과 알림\",
+              \"description\": \"**상태**: ${STATUS}\\n**브랜치**: ${BRANCH}\\n**담당자**: ${ACTOR}\",
+              \"color\": ${COLOR},
+              \"fields\": [
+                {\"name\": \"커밋 메시지\", \"value\": \"${COMMIT_MSG_ESCAPED}\"},
+                {\"name\": \"로그\", \"value\": \"${RUN_URL}\"}
               ]
             }]
-          }' \
+          }" \
           ${{ secrets.DISCORD_WEBHOOK }}
