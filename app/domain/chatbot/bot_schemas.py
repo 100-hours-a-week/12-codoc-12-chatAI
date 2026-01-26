@@ -17,7 +17,6 @@ class UserMsgCreateReq(BaseModel):
     user_message : str
     # session_id : int
     current_node : str
-    answer_guides: List[AnswerGuide]
     
 class UserMsgCreateRes(BaseModel):
     model_config = ConfigDict(
