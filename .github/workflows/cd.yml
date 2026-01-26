@@ -1,0 +1,93 @@
+name: ai-cd
+
+on:
+  push:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      - name: Trigger deploy via SSM
+        run: |
+          ARTIFACT_NAME="ai-source-${{ github.sha }}"
+          CMD="bash /home/ubuntu/ai/deploy.sh ${{ secrets.GH_TOKEN }} ${{ github.repository }} ${{ github.run_id }} $ARTIFACT_NAME ${{ secrets.MODEL_API_KEY }}"
+
+          # 1. 명령 전송
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "${{ secrets.AI_INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "commands=[\"$CMD\"]" \
+            --region ${{ secrets.AWS_REGION }} \
+            --query "Command.CommandId" --output text)
+
+          echo "🚀 배포 명령 전송됨 (ID: $COMMAND_ID). 완료될 때까지 추적합니다..."
+
+          # 2. 루프를 돌며 상태 추적 (wait의 타임아웃 제한을 우회)
+
+          while true; do
+            # 인스턴스 단위가 아니라 '명령 ID' 단위로 상태 확인 (더 안정적임)
+            STATUS=$(aws ssm list-commands \
+              --command-id "$COMMAND_ID" \
+              --region ${{ secrets.AWS_REGION }} \
+              --query "Commands[0].Status" --output text)
+            
+            echo "현재 배포 상태: $STATUS"
+
+            if [[ "$STATUS" != "InProgress" && "$STATUS" != "Pending" ]]; then
+              break
+            fi
+            sleep 15
+          done
+
+          # 3. [중요] 실행 로그(stdout/stderr) 강제 출력
+          echo "=== 📋 EC2 배포 상세 로그 ==="
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "${{ secrets.AI_INSTANCE_ID }}" \
+            --region ${{ secrets.AWS_REGION }} \
+            --query "StandardErrorContent" --output text
+
+          # 4. 상태가 Success가 아니면 워크플로우를 빨간색(실패)으로 종료
+          if [ "$STATUS" != "Success" ]; then
+            echo "❌ 배포 최종 실패 (상태: $STATUS)"
+            exit 1
+          fi
+          echo "✅ 배포 최종 성공"
+      - name: Notify Discord
+        if: always()
+        run: |
+          # push 이벤트 컨텍스트에 맞게 변수 수정
+          STATUS="${{ job.status == 'success' && '성공' || '실패' }}"
+          COLOR="${{ job.status == 'success' && '65280' || '16711680' }}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          curl -X POST -H "Content-Type: application/json" \
+          -d '{
+            "embeds": [{
+              "title": "AI CD 결과 (AI)",
+              "description": "상태: '"${STATUS}"'\n브랜치: ${{ github.ref_name }}\n담당자: ${{ github.actor }}",
+              "color": '"${COLOR}"',
+              "fields": [
+                {"name": "커밋 메시지", "value": "${{ github.event.head_commit.message || 'Manual Trigger' }}"},
+                {"name": "로그 확인", "value": "[Github Actions Log]('"${RUN_URL}"')"}
+              ]
+            }]
+          }' \
+          ${{ secrets.DISCORD_WEBHOOK }}
