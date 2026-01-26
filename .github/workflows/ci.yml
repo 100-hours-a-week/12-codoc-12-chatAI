@@ -99,10 +99,14 @@ jobs:
           ACTOR="${{ github.actor }}"
           SHA="${{ github.sha }}"
           COMMIT_MSG="${{ github.event.head_commit.message }}"
+
           if [ -z "$COMMIT_MSG" ]; then
             COMMIT_MSG="(커밋 메시지를 이벤트에서 가져올 수 없음)"
           fi
-          COMMIT_MSG_ESCAPED="$(printf '%s' "$COMMIT_MSG" | sed 's/\\/\\\\/g; s/\"/\\\"/g')"
+
+          # 역슬래시, 큰따옴표, 그리고 줄바꿈(\n)을 JSON 규격에 맞게 이스케이프 처리
+          COMMIT_MSG_ESCAPED=$(printf '%s' "$COMMIT_MSG" | sed 's/\\/\\\\/g; s/\"/\\\"/g; :a;N;$!ba;s/\n/\\n/g')
+
           if [ "${{ job.status }}" = "success" ]; then
             STATUS="성공"
             COLOR="65280"
@@ -110,6 +114,7 @@ jobs:
             STATUS="실패"
             COLOR="16711680"
           fi
+
           curl -X POST -H "Content-Type: application/json" \
           -d "{
             \"embeds\": [{
