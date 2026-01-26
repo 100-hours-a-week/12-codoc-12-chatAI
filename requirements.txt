@@ -8,3 +8,6 @@ uvicorn
 pytest
 httpx
 pydantic
+
+# 의존성 임시 추가
+langchain-google-genai
