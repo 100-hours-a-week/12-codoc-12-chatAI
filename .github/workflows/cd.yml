@@ -1,3 +1,4 @@
+# .github/workflows/cd.yml
 name: ai-cd
 
 on:
@@ -17,59 +18,85 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+
     steps:
+      # 1) AWS 인증
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
-      - name: Trigger deploy via SSM
+
+      # 2) SSM 배포 실행 (.env 생성 + deploy.sh 실행)
+      - name: Trigger deploy via SSM (create env + run deploy)
         run: |
+          set -e
+
           ARTIFACT_NAME="ai-source-${{ github.sha }}"
-          CMD="bash /home/ubuntu/ai/deploy.sh ${{ secrets.GH_TOKEN }} ${{ github.repository }} ${{ github.run_id }} $ARTIFACT_NAME ${{ secrets.MODEL_API_KEY }}"
+          ENV_PATH="/home/ubuntu/ai/shared/.env"
 
-          # 1. 명령 전송
-          COMMAND_ID=$(aws ssm send-command \
-            --instance-ids "${{ secrets.AI_INSTANCE_ID }}" \
-            --document-name "AWS-RunShellScript" \
-            --parameters "commands=[\"$CMD\"]" \
-            --region ${{ secrets.AWS_REGION }} \
-            --query "Command.CommandId" --output text)
+          COMMAND_ID=$(
+            aws ssm send-command \
+              --instance-ids "${{ secrets.AI_INSTANCE_ID }}" \
+              --document-name "AWS-RunShellScript" \
+              --region "${{ secrets.AWS_REGION }}" \
+              --parameters commands="[
+                \"set -e\",
+                \"mkdir -p /home/ubuntu/ai/shared\",
+                \"cat > ${ENV_PATH} << 'EOF'\",
+                \"${{ secrets.AI_ENV }}\",
+                \"EOF\",
+                \"chmod 600 ${ENV_PATH}\",
+                \"chown ubuntu:ubuntu ${ENV_PATH}\",
+                \"bash /home/ubuntu/ai/deploy.sh '${{ secrets.GH_TOKEN }}' '${{ github.repository }}' '${{ github.run_id }}' '${ARTIFACT_NAME}' '${ENV_PATH}'\"
+              ]" \
+              --query "Command.CommandId" --output text
+          )
 
-          echo "🚀 배포 명령 전송됨 (ID: $COMMAND_ID). 완료될 때까지 추적합니다..."
+          echo "🚀 배포 명령 전송됨 (ID: $COMMAND_ID)"
 
-          # 2. 루프를 돌며 상태 추적 (wait의 타임아웃 제한을 우회)
-
+          # 상태 추적 루프
           while true; do
-            # 인스턴스 단위가 아니라 '명령 ID' 단위로 상태 확인 (더 안정적임)
             STATUS=$(aws ssm list-commands \
               --command-id "$COMMAND_ID" \
-              --region ${{ secrets.AWS_REGION }} \
+              --region "${{ secrets.AWS_REGION }}" \
               --query "Commands[0].Status" --output text)
-            
+
             echo "현재 배포 상태: $STATUS"
 
             if [[ "$STATUS" != "InProgress" && "$STATUS" != "Pending" ]]; then
               break
             fi
-            sleep 15
+
+            sleep 10
           done
 
-          # 3. [중요] 실행 로그(stdout/stderr) 강제 출력
-          echo "=== 📋 EC2 배포 상세 로그 ==="
+          # stdout 출력
+          echo "=== ✅ stdout (정상 로그) ==="
           aws ssm get-command-invocation \
             --command-id "$COMMAND_ID" \
             --instance-id "${{ secrets.AI_INSTANCE_ID }}" \
-            --region ${{ secrets.AWS_REGION }} \
+            --region "${{ secrets.AWS_REGION }}" \
+            --query "StandardOutputContent" --output text
+
+          # stderr 출력
+          echo "=== ❌ stderr (에러 로그) ==="
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "${{ secrets.AI_INSTANCE_ID }}" \
+            --region "${{ secrets.AWS_REGION }}" \
             --query "StandardErrorContent" --output text
 
-          # 4. 상태가 Success가 아니면 워크플로우를 빨간색(실패)으로 종료
+          # 실패 시 워크플로우 실패 처리
           if [ "$STATUS" != "Success" ]; then
-            echo "❌ 배포 최종 실패 (상태: $STATUS)"
+            echo "❌ 배포 최종 실패"
             exit 1
           fi
+
           echo "✅ 배포 최종 성공"
+
+      # 3) Discord 알림 (항상 실행)
       - name: Notify Discord (always)
         if: always()
         run: |
@@ -84,26 +111,29 @@ jobs:
             COMMIT_MSG="(커밋 메시지를 이벤트에서 가져올 수 없음)"
           fi
 
-          # 역슬래시, 큰따옴표, 그리고 줄바꿈(\n)을 JSON 규격에 맞게 이스케이프 처리
-          COMMIT_MSG_ESCAPED=$(printf '%s' "$COMMIT_MSG" | sed 's/\\/\\\\/g; s/\"/\\\"/g; :a;N;$!ba;s/\n/\\n/g')
+          # JSON 안전 이스케이프 처리
+          COMMIT_MSG_ESCAPED=$(printf '%s' "$COMMIT_MSG" | sed \
+            's/\\/\\\\/g; s/\"/\\\"/g; :a;N;$!ba;s/\n/\\n/g')
 
+          # 상태 분기
           if [ "${{ job.status }}" = "success" ]; then
-            STATUS="성공"
+            STATUS="✅ 성공"
             COLOR="65280"
           else
-            STATUS="실패"
+            STATUS="❌ 실패"
             COLOR="16711680"
           fi
 
+          # Discord Webhook 전송
           curl -X POST -H "Content-Type: application/json" \
           -d "{
             \"embeds\": [{
-              \"title\": \"[AI] CD 결과 알림\",
+              \"title\": \"[AI] CD 배포 결과 알림\",
               \"description\": \"**상태**: ${STATUS}\\n**브랜치**: ${BRANCH}\\n**담당자**: ${ACTOR}\",
               \"color\": ${COLOR},
               \"fields\": [
                 {\"name\": \"커밋 메시지\", \"value\": \"${COMMIT_MSG_ESCAPED}\"},
-                {\"name\": \"로그\", \"value\": \"${RUN_URL}\"}
+                {\"name\": \"배포 로그\", \"value\": \"${RUN_URL}\"}
               ]
             }]
           }" \
