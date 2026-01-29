@@ -1,111 +1,64 @@
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
-from app.common.config import llm
-from app.common.api_response import CommonResponse
 from . import bot_schemas
-from typing import Dict, Any
-from enum import Enum
-import asyncio
 import json
-
+from app.common.config import llm  # 원래 쓰시던 llm 가져오기
+from app.graph.workflow import app as langgraph_app
 
 router = APIRouter(prefix="/chatbot", tags=["chatbot"])
+workflow_status = {}
 
-class WorkflowStatus(str, Enum):
-    ACCEPTED = "ACCEPTED"
-    PROCESSING = "PROCESSING"
-    COMPLETED = "COMPLETED"
-    FAILED = "FAILED"
-    CANCELED = "CANCELED"
-    
-# 실행 중인 워크 플로우 상태 저장 -> 실제론 DB 사용
-workflow_status: Dict[str, Dict[str, Any]] = {}
+@router.post("")
+async def chat(post: bot_schemas.UserMsgCreateReq):
+    workflow_status[post.run_id] = post.model_dump()
+    return {"run_id": post.run_id, "status": "ACCEPTED"}
 
-async def execute_langgraph_workflow(run_id: int, request:bot_schemas.UserMsgCreateReq):
-    # 여기에 LangGraph 워크플로우 실행 로직을 구현합니다.
-    # 예시로, run_id와 request 데이터를 사용하여 워크플로우를 실행한다고 가정합니다.
-    # 실제 구현은 LangGraph의 API 또는 SDK를 사용하여 작성해야 합니다.
-    
-    try:
-        workflow_status[run_id]["status"] = WorkflowStatus.PROCESSING
-        
-        # LangGraph 워크플로우 실행 로직 추가
-        
-        workflow_status[run_id]["status"] = WorkflowStatus.COMPLETED
-        workflow_status[run_id]["result"] = "작업 완료"
-
-    except asyncio.CancelledError:
-        workflow_status[run_id]["status"] = WorkflowStatus.CANCELED
-    except Exception as e:
-        workflow_status[run_id]["status"] = WorkflowStatus.FAILED
-        workflow_status[run_id]["error"] = str(e)
-
-@router.post("", response_model=CommonResponse[bot_schemas.UserMsgCreateRes])
-async def chat(
-    post : bot_schemas.UserMsgCreateReq,
-    background_tasks : BackgroundTasks
-)-> CommonResponse[Dict[str, Any]]:
-    # 메세지 받고 백그라운드에서 워크플로우 실행
-    
-    run_id = post.run_id
-    
-    workflow_status[run_id] = {
-        "status": WorkflowStatus.ACCEPTED,
-        "user_id" : post.user_id,
-        "problem_id" : post.problem_id,
-        "prompt" : post.user_message
-    }   
-
-    background_tasks.add_task(execute_langgraph_workflow, run_id, post)
-    
-    return CommonResponse.success_response(
-        message="채팅 요청이 접수되었습니다.",
-        data=bot_schemas.UserMsgCreateRes(
-            run_id=run_id,
-            status=WorkflowStatus.ACCEPTED
-        )
-    )
-
-@router.get("/{run_id}/stream", response_model=CommonResponse[Dict[str, Any]])
+@router.get("/{run_id}/stream")
 async def get_chat_stream(run_id: int):
-    
     if run_id not in workflow_status:
-        return StreamingResponse(
-            content=iter([
-                f'event: error\ndata: {json.dumps({"code": "NOT_FOUND", "message": "워크플로우를 찾을 수 없습니다."}, ensure_ascii=False)}\n\n'
-            ]),
-            media_type="text/event-stream"
-        )
-        
-    async def generate():
-        yield f'event: status\ndata: {json.dumps({"code": "SUCCESS", "message": "OK", "result": {"status": WorkflowStatus.PROCESSING, "message": "작업 처리 중..."}}, ensure_ascii=False)}\n\n'
-    
-        try:
-            accumulated_text = ""    
-            async for chunk in llm.astream(workflow_status[run_id].get("prompt", "")):
-                if workflow_status[run_id]["status"] == WorkflowStatus.CANCELED:
-                        yield f'event: error\ndata: {json.dumps({"code": "CANCELED", "message": "작업이 취소되었습니다."}, ensure_ascii=False)}\n\n'
-                        break
-                    
-                token_text = chunk.text
-                accumulated_text += token_text
-                
-                yield f'event: token\ndata: {json.dumps({"code": "SUCCESS", "message": "OK", "result": {"text": token_text}}, ensure_ascii=False)}\n\n'
-                
-            final_response = {
-                "status": WorkflowStatus.COMPLETED,
-                "ai_message": accumulated_text,
-                "current_node": workflow_status[run_id].get("current_node", ""),
-                 "is_correct": workflow_status[run_id].get("is_correct", False),
-                "current_answer": workflow_status[run_id].get("current_answer", "")
-            }
-            yield f'event: final\ndata: {json.dumps({"code": "SUCCESS", "message": "OK", "result": final_response}, ensure_ascii=False)}\n\n'
-        
-        except Exception as e:
-            workflow_status[run_id]["status"] = WorkflowStatus.FAILED
-            workflow_status[run_id]["error"] = str(e)
-            yield f'event: error\ndata: {json.dumps({"code": "FAILED", "message": str(e)}, ensure_ascii=False)}\n\n'
-        
-    return StreamingResponse(generate(), media_type="text/event-stream")
+        raise HTTPException(status_code=404, detail="Run ID not found")
 
-# 워크플로우 취소 API 엔드포인트 추가
+    async def generate():
+        data = workflow_status[run_id]
+
+        # 1. 랭그래프를 'invoke'로 실행 (이벤트 추적 없이 결과만 딱 가져옵니다)
+        # 이 과정에서 Qdrant 검색, 의도 파악, 검증이 한꺼번에 일어납니다.
+        initial_state = {
+            "messages": [("human", data["user_message"])],
+            "problem_id": str(data["problem_id"]),
+            "current_stage": data["current_node"]
+        }
+
+        yield f'event: status\ndata: {json.dumps({"message": "데이터 분석 중..."})}\n\n'
+
+        # 💡 그래프 로직 실행 (검색 결과 등을 담은 최종 state를 가져옴)
+        final_state = langgraph_app.invoke(initial_state)
+
+        # 2. 그래프가 찾아온 데이터와 가이드 추출
+        retrieved = final_state.get("retrieved_content", {})
+        guide = retrieved.get("chatbot_answer_guide", "유저 스스로 생각하도록 유도하세요.")
+        intent = final_state.get("intent", "CARD_PROGRESS")
+
+        # 3. 원래 파트장님이 하시던 방식대로 llm.astream 실행!
+        system_prompt = f"""
+        너는 소크라테스식 질문법을 쓰는 튜터야.
+        [가이드]: {guide}
+        [의도]: {intent}
+        [제약]: 반드시 2문장 이내로 짧게 질문할 것. 정답을 직접 주지 말 것.
+        """
+
+        user_msg = data["user_message"]
+
+        try:
+            # 💡 익숙한 그 방식 그대로!
+            async for chunk in llm.astream([("system", system_prompt), ("human", user_msg)]):
+                token = chunk.content
+                if token:
+                    yield f'event: token\ndata: {json.dumps({"result": {"text": token}}, ensure_ascii=False)}\n\n'
+
+            yield f'event: final\ndata: {json.dumps({"status": "COMPLETED", "current_node": final_state.get("current_stage")})}\n\n'
+
+        except Exception as e:
+            yield f'event: error\ndata: {json.dumps({"message": str(e)})}\n\n'
+
+    return StreamingResponse(generate(), media_type="text/event-stream")

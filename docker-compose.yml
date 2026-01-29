@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  qdrant:
+    image: qdrant/qdrant
+    container_name: qdrant_db
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    environment:
+      QDRANT_API_KEY: ${QDRANT_API_KEY}  
+    volumes:
+      # 호스트의 qdrant_storage 폴더를 컨테이너 내부 저장소와 연결
+      - ./qdrant_storage:/qdrant/storage 
+    restart: always
+
+  api_server:
+    build: .
+    ports:
+      - "8000:8000"
+    depends_on:
+      - qdrant
+    env_file:
+      - .env  
