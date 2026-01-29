@@ -1,4 +1,6 @@
+# [FastAPI Core]
 fastapi[standard]
+
 langchain
 langchain-openai
 langchain-qdrant
@@ -7,12 +9,30 @@ langgraph
 # [DB Client]
 qdrant-client
 python-dotenv
+
 uvicorn
-pytest
-httpx
+python-dotenv
 pydantic
+httpx
+
 
 # 의존성 임시 추가
 langchain-google-genai
+
+# [LangChain Framework]
+langchain
+langchain-community
+langchain-openai
+langchain-google-genai
+langchain-qdrant
+
+# [DB Client]
+qdrant-client
+
+# [Utilities]
+pillow
+tiktoken
+pytest
+
 
 sentence-transformers

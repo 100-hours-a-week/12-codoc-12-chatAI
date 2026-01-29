@@ -15,6 +15,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from app.common.exceptions.exception_handler import register_exception_handlers
 from app.common.config import llm
 from app.domain.chatbot.bot_router import router as bot_router
+import os
 
 from app.graph.workflow import app as langgraph_app
 from app.graph.state import AgentState
@@ -24,7 +25,6 @@ VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", "384"))
 QDRANT_HOST = os.getenv("QDRANT_HOST", "qdrant")  # 도커 내부 통신용 
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "")
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -49,10 +49,21 @@ async def lifespan(app: FastAPI):
             print(f"✅ 컬렉션 '{COLLECTION_NAME}' 준비 완료.")
     except Exception as e:
         print(f"⚠️ Qdrant 연결 실패: {e}")
+
+    
+    if not client.collection_exists(COLLECTION_NAME):
+        client.create_collection(
+            collection_name=COLLECTION_NAME,
+            vectors_config=VectorParams(size=VECTOR_SIZE, distance=Distance.COSINE),
+        )
+        print(f"컬렉션 '{COLLECTION_NAME}' 생성 완료!")
+    else:
+        print(f"컬렉션 '{COLLECTION_NAME}'이 이미 존재합니다.")
     
     yield # 여기서부터 서버 가동
     
     print("서버 종료")
+
 
 app = FastAPI(lifespan=lifespan)
 
