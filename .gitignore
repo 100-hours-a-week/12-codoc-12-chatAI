@@ -28,3 +28,6 @@ ENV/
 
 # 5. Qdrant 로컬 벡터 DB 저장소 (개발 환경)
 qdrant_storage/
+
+.idea/
+*.iml
