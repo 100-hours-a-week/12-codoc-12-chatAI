@@ -34,8 +34,7 @@ print("🔧 초기화 중...")
 
 # Qdrant 클라이언트
 client = QdrantClient(
-    host=QDRANT_HOST,
-    port=QDRANT_PORT,
+    url=f"http://{QDRANT_HOST}:{QDRANT_PORT}", # https가 아닌 http임을 명시
     api_key=QDRANT_API_KEY if QDRANT_API_KEY else None,
 )
 
@@ -160,27 +159,27 @@ def upload_to_qdrant(points: List[PointStruct]) -> None:
 
 # ==================== 메인 실행 ====================
 if __name__ == "__main__":
+    import os
     import sys
     
-    # 파일 경로 (상대경로 또는 명령행 인자)
-    if len(sys.argv) > 1:
-        test_file = sys.argv[1]
-    else:
-        # 기본값: 현재 디렉토리 기준 상대경로
-        test_file = "./programmers_data2/nested_json/81301_nested.json"
+    current_file_path = os.path.abspath(__file__)
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file_path)))
     
-    # 상대경로를 절대경로로 변환
-    test_file = os.path.abspath(test_file)
-    
+    test_file = os.path.join(
+        project_root, 
+        "app", "qdrant", "nested_json", "81301_nested.json"
+    )
+        
     # 파일 존재 확인
     if not os.path.exists(test_file):
         print(f"❌ 파일을 찾을 수 없습니다: {test_file}")
-        print(f"💡 팁: python embed_and_upload.py <JSON 파일 경로>")
+        print("💡 프로젝트 구조 내에 JSON 파일이 있는지 확인해 주세요.")
         exit(1)
+        
+    print(f"📂 [상대 경로 로드 성공] 분석 대상: {test_file}")
     
     # 1. 로드 및 임베딩
     points = load_and_embed_json(test_file)
-    
     # 2. Qdrant 업로드
     upload_to_qdrant(points)
     

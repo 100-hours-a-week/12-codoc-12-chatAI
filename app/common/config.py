@@ -37,3 +37,6 @@ qdrant_client = QdrantClient(
     port=settings.QDRANT_PORT,
     api_key=settings.QDRANT_API_KEY if settings.QDRANT_API_KEY else None,
 )
+
+QDRANT_URL = f"http://{settings.QDRANT_HOST}:{settings.QDRANT_PORT}"
+QDRANT_API_KEY = settings.QDRANT_API_KEY
