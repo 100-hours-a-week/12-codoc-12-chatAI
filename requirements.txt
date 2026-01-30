@@ -6,10 +6,11 @@ pydantic
 httpx
 
 # [LangChain Framework]
-langchain
-langchain-community
+langchain>=0.3.0
+langchain-community>=0.3.0
+langchain-google-genai>=2.0.0
+google-genai>=0.3.0
 langchain-openai
-langchain-google-genai
 langchain-qdrant
 
 # [DB Client]
