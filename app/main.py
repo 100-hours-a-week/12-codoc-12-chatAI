@@ -8,6 +8,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from app.common.exceptions.exception_handler import register_exception_handlers
 from app.common.config import llm, settings
 from app.domain.chatbot.bot_router import router as bot_router
+from app.logging_config import setup_logging
+from app.middleware.request_logging import request_logging_middleware
 import os
 
 VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", "384"))
@@ -36,7 +38,12 @@ async def lifespan(app: FastAPI):
     
     print("서버 종료")
     
+setup_logging()
+
 app = FastAPI()
+
+# 요청 완료 시 JSON + 텍스트 로그 기록
+app.middleware("http")(request_logging_middleware)
 
 register_exception_handlers(app)
 
