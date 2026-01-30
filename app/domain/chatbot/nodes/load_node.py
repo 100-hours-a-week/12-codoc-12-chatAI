@@ -7,19 +7,19 @@ async def load_problem_node(state: ChatBotState) -> dict:
     Qdrant(Collection 1)에서 단계별 지문 정보를 로드하여 State에 저장합니다.
     """
     problem_id = state.get("problem_id")
-    current_node = state.get("current_node") # 예: 'BACKGROUND', 'GOAL', 'CONSTRAINT' 등
+    paragraph_type = state.get("paragraph_type") # 예: 'BACKGROUND', 'GOAL', 'CONSTRAINT' 등
 
-    print(f"🔍 Qdrant 조회 시도: ID={problem_id}, Node={current_node}") # 로그 추가
+    print(f"🔍 Qdrant 조회 시도: ID={problem_id}, Node={paragraph_type}") # 로그 추가
 
     # 1. Qdrant에서 해당 문제의 현재 단계 데이터 조회 (필터링 기반) -> 추후 유사도 검색으로 변경
     paragraph_data = await get_paragraph_by_type(
         problem_id=problem_id,
-        paragraph_type=current_node
+        paragraph_type=paragraph_type
     )
 
     # 데이터가 없을 경우에 대한 예외 처리
     if not paragraph_data:
-        raise ValueError(f"Qdrant에서 데이터를 찾을 수 없습니다. (ID: {problem_id}, Node: {current_node})")
+        raise ValueError(f"Qdrant에서 데이터를 찾을 수 없습니다. (ID: {problem_id}, Node: {paragraph_type})")
 
     print(f"✅ 지문 로드 성공: {paragraph_data['content'][:20]}...") # 성공 로그
 

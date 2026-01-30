@@ -14,7 +14,7 @@ class ChatBotState(TypedDict):
     
     # 3. 흐름 제어 (스프링의 current_node와 매칭)
     # 스프링이 보낸 'CONSTRAINT' 등 노드 정보를 저장하여 적절한 프롬프트를 선택
-    current_node: str 
+    paragraph_type: str 
     paragraph_order: int
     
     # 4. 벡터 DB(Collection 1) 데이터

@@ -24,7 +24,6 @@ async def chat(
     
     run_id = post.run_id
     bot_controller.workflow_status[run_id] = {"status": WorkflowStatus.ACCEPTED}    
-    # 워크플로우 백그라운드 실행
     background_tasks.add_task(bot_controller.execute_workflow, run_id, post) 
     
     return CommonResponse.success_response(

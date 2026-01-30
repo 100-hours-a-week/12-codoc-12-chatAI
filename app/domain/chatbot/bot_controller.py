@@ -28,9 +28,11 @@ class ChatBotController:
                 "user_id": request.user_id,
                 "problem_id": request.problem_id,
                 "run_id": run_id,
-                "current_node": request.current_node,
+                "paragraph_type": request.paragraph_type if request.paragraph_type else "BACKGROUND",
                 "is_correct": False
             }
+            self.workflow_status[run_id]["paragraph_type"] = initial_state["paragraph_type"]
+            
             # 이벤트를 제너레이터 형태로 저장
             self.workflow_status[run_id]["event_generator"] = chatbot_graph.astream_events(
                 initial_state, version="v2"
@@ -56,9 +58,9 @@ class ChatBotController:
                 node_name = event.get("metadata", {}).get("langgraph_node", "")
 
                 # 1. 노드 시작 알림
-                if kind == "on_chain_start" and event["name"] in ["tutor_question", "analyze_answer"]:
-                    self.workflow_status[run_id]["current_node"] = event["name"]
-                    yield f'event: status\ndata: {json.dumps({"current_node": event["name"]}, ensure_ascii=False)}\n\n'
+                if kind == "on_chain_start" and event["name"] == "tutor_question":
+                    current_type = self.workflow_status[run_id].get("paragraph_type", "UNKNOWN")
+                    yield f'event: status\ndata: {json.dumps({"paragraph_type": current_type}, ensure_ascii=False)}\n\n'
 
                 # 2. 토큰 스트리밍 (Tutor는 유저에게, Analyzer는 로그로)
                 elif kind == "on_chat_model_stream":
@@ -83,7 +85,7 @@ class ChatBotController:
             final_data = {
                 "status": WorkflowStatus.COMPLETED,
                 "ai_message": accumulated_text,
-                "current_node": self.workflow_status[run_id].get("current_node", ""),
+                "paragraph_type": self.workflow_status[run_id].get("paragraph_type", ""),
                 "is_correct": self.workflow_status[run_id].get("is_correct", False),
                 "current_answer": self.workflow_status[run_id].get("current_answer", "")
             }

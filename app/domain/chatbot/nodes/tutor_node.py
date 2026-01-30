@@ -8,12 +8,11 @@ async def tutor_node(state: ChatBotState) -> dict:
     유저에게 단계별 가이드 질문을 생성합니다.
     """
     # 1. 현재 단계에 맞는 프롬프트 템플릿 선택
-    current_step = state.get("current_node")
-    prompt_template = PROMPTS.get(current_step)
+    current_type = state.get("paragraph_type")
+    prompt_template = PROMPTS.get(current_type)
     
     if not prompt_template:
-        raise ValueError(f"정의되지 않은 노드 단계입니다: {current_step}")
-
+        raise ValueError(f"정의되지 않은 노드 단계입니다: {current_type}")
     # 2. 체인 구성 (프롬프트 | 모델)
     chain = prompt_template | llm
 
