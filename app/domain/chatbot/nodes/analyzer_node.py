@@ -37,13 +37,18 @@ async def analyzer_node(state: ChatBotState) -> dict:
     
     is_correct = result.get("is_correct", False)
     
+    current_answer = ""
     # 3. 결과 업데이트
     # is_correct가 False일 경우 retry_count를 1 증가시킵니다.
     new_retry_count = state.get("retry_count", 0)
-    if not is_correct:
+    
+    if is_correct:
+        current_answer = state.get("essential_keywords")
+    else:
         new_retry_count += 1
     
     return {
         "is_correct": is_correct,
-        "retry_count": new_retry_count
+        "retry_count": new_retry_count,
+        "current_answer": current_answer
     }
