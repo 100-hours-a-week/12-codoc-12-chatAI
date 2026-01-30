@@ -23,7 +23,8 @@ async def tutor_node(state: ChatBotState) -> dict:
         "content": state.get("content"),
         "chatbot_answer_guide": state.get("chatbot_answer_guide"),
         "essential_keywords": state.get("essential_keywords"), # 내부 참조용으로만 사용
-        "user_message": state["messages"][-1].content
+        "user_message": state["messages"][-1].content,
+        "is_correct": state.get("is_correct", False)
     })
 
     # 4. 생성된 AI 메시지를 State에 추가하도록 반환
