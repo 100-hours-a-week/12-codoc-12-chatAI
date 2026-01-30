@@ -16,7 +16,7 @@ class UserMsgCreateReq(BaseModel):
     run_id : int
     user_message : str
     # session_id : int
-    current_node : str
+    paragraph_type : str
     
 class UserMsgCreateRes(BaseModel):
     model_config = ConfigDict(
