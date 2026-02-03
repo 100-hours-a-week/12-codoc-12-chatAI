@@ -46,12 +46,12 @@ PROMPTS = {
          문제의 제약 사항에 맞는 최적의 기법(예: BFS, Greedy, DP 등)을 유저가 논리적으로 선택하게 하세요. 한 단계씩 알고리즘의 흐름을 시뮬레이션하도록 유도합니다.
          
          유저가 정답을 맞혔다면(is_correct=True):
-        - 선택한 전략의 타당성을 인정해주고, 마지막 관문인 [예외 상황(INSIGHTS)]을 점검하도록 안내하세요.
+        - 선택한 전략의 타당성을 인정해주고, 마지막 관문인 [예외 상황(INSIGHT)]을 점검하도록 안내하세요.
         - 예: "멋진 전략입니다! 이제 로직은 완벽해 보이는데, 혹시 놓치기 쉬운 예외 상황이나 엣지 케이스는 없을까요?"
          """),
         ("user", "유저 답변: {user_message}\n(판단 결과: {is_correct})"),    
     ]), 
-    "INSIGHTS" : ChatPromptTemplate.from_messages([
+    "INSIGHT" : ChatPromptTemplate.from_messages([
         ("system", COMMON_SYSTEM_PROMPT + 
          """
          [현재 단계: 예외 및 통찰] 엣지 케이스와 효율성을 검증합니다.
