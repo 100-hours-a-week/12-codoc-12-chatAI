@@ -157,39 +157,111 @@ def upload_to_qdrant(points: List[PointStruct]) -> None:
         raise
 
 
-# ==================== 메인 실행 ====================
+# ==================== 메인 실행(파일 별로) ====================
+# if __name__ == "__main__":
+#     import os
+#     import sys
+    
+#     current_file_path = os.path.abspath(__file__)
+#     project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file_path)))
+    
+#     test_file = os.path.join(
+#         project_root, 
+#         "app", "qdrant", "nested_json", "5_nested.json"
+#     )
+        
+#     # 파일 존재 확인
+#     if not os.path.exists(test_file):
+#         print(f"❌ 파일을 찾을 수 없습니다: {test_file}")
+#         print("💡 프로젝트 구조 내에 JSON 파일이 있는지 확인해 주세요.")
+#         exit(1)
+        
+#     print(f"📂 [상대 경로 로드 성공] 분석 대상: {test_file}")
+    
+#     # 1. 로드 및 임베딩
+#     points = load_and_embed_json(test_file)
+#     # 2. Qdrant 업로드
+#     upload_to_qdrant(points)
+    
+#     # 3. 검증
+#     print("\n🔍 업로드 결과 검증...")
+#     try:
+#         collection_info = client.get_collection(COLLECTION_NAME)
+#         print(f"✅ 콜렉션 포인트 수: {collection_info.points_count}")
+#         print(f"✅ 벡터 차원: {collection_info.config.params.vectors.size}")
+#     except Exception as e:
+#         print(f"❌ 검증 실패: {e}")
+    
+#     print("\n✨ 완료!")
+    
+# ==================== 메인 실행(폴더 전체) ====================
 if __name__ == "__main__":
     import os
     import sys
     
+    # 1. 경로 설정
     current_file_path = os.path.abspath(__file__)
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file_path)))
     
-    test_file = os.path.join(
+    # 파일 하나가 아니라 '폴더'를 타겟으로 잡습니다.
+    target_dir = os.path.join(
         project_root, 
-        "app", "qdrant", "nested_json", "81301_nested.json"
+        "app", "qdrant", "nested_json"
     )
         
-    # 파일 존재 확인
-    if not os.path.exists(test_file):
-        print(f"❌ 파일을 찾을 수 없습니다: {test_file}")
-        print("💡 프로젝트 구조 내에 JSON 파일이 있는지 확인해 주세요.")
+    # 폴더 존재 확인
+    if not os.path.exists(target_dir):
+        print(f"❌ 폴더를 찾을 수 없습니다: {target_dir}")
+        print("💡 프로젝트 구조 내에 'nested_json' 폴더가 있는지 확인해 주세요.")
         exit(1)
         
-    print(f"📂 [상대 경로 로드 성공] 분석 대상: {test_file}")
+    print(f"📂 [폴더 로드 성공] 분석 대상 폴더: {target_dir}")
+
+    # 2. 폴더 내 모든 파일 순회
+    # 파일명 순서대로 정렬해서 처리 (1.json, 2.json ...)
+    file_list = sorted([f for f in os.listdir(target_dir) if f.endswith(".json")])
     
-    # 1. 로드 및 임베딩
-    points = load_and_embed_json(test_file)
-    # 2. Qdrant 업로드
-    upload_to_qdrant(points)
+    if not file_list:
+        print("⚠️ 폴더 안에 .json 파일이 하나도 없습니다.")
+        exit(0)
+
+    print(f"🚀 총 {len(file_list)}개의 파일을 발견했습니다. 일괄 처리를 시작합니다.\n" + "="*50)
+
+    total_processed_files = 0
+    total_uploaded_points = 0
+
+    for filename in file_list:
+        file_path = os.path.join(target_dir, filename)
+        
+        try:
+            # (1) 로드 및 임베딩
+            # 기존 함수 load_and_embed_json이 내부적으로 로그를 찍으므로 그대로 둡니다.
+            points = load_and_embed_json(file_path)
+            
+            if not points:
+                print(f"  ⚠️ {filename}: 생성된 포인트가 없어 건너뜁니다.")
+                continue
+
+            # (2) Qdrant 업로드
+            upload_to_qdrant(points)
+            
+            total_processed_files += 1
+            total_uploaded_points += len(points)
+            
+        except Exception as e:
+            print(f"❌ {filename} 처리 중 에러 발생: {e}")
+            # 에러가 나도 다음 파일은 계속 진행하도록 continue
+            continue
+            
+    # 3. 최종 검증
+    print("\n" + "="*50)
+    print("🎉 모든 작업이 완료되었습니다!")
+    print(f"📊 처리된 파일: {total_processed_files} / {len(file_list)} 개")
     
-    # 3. 검증
-    print("\n🔍 업로드 결과 검증...")
+    print("\n🔍 최종 Qdrant 상태 검증...")
     try:
         collection_info = client.get_collection(COLLECTION_NAME)
-        print(f"✅ 콜렉션 포인트 수: {collection_info.points_count}")
-        print(f"✅ 벡터 차원: {collection_info.config.params.vectors.size}")
+        print(f"✅ 현재 콜렉션 총 포인트 수: {collection_info.points_count}")
+        print(f"✅ (이번 실행으로 추가된 포인트 포함)")
     except Exception as e:
         print(f"❌ 검증 실패: {e}")
-    
-    print("\n✨ 완료!")
