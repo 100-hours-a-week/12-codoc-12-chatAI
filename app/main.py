@@ -36,7 +36,15 @@ async def lifespan(app: FastAPI):
     
     print("서버 종료")
     
-app = FastAPI()
+docs_enabled = os.getenv("DOCS_ENABLED", "true").lower() == "true"
+    
+app = FastAPI(
+    title="CodoC",
+    
+    docs_url="/docs" if docs_enabled else None,
+    redoc_url="/redoc" if docs_enabled else None,
+    openapi_url="/openapi.json" if docs_enabled else None
+)
 
 register_exception_handlers(app)
 
