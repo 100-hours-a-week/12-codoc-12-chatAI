@@ -38,9 +38,15 @@ async def lifespan(app: FastAPI):
     
     print("서버 종료")
     
-setup_logging()
-
-app = FastAPI()
+docs_enabled = os.getenv("DOCS_ENABLED", "true").lower() == "true"
+    
+app = FastAPI(
+    title="CodoC",
+    
+    docs_url="/docs" if docs_enabled else None,
+    redoc_url="/redoc" if docs_enabled else None,
+    openapi_url="/openapi.json" if docs_enabled else None
+)
 
 # 요청 완료 시 JSON + 텍스트 로그 기록
 app.middleware("http")(request_logging_middleware)

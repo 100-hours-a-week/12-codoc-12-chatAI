@@ -19,14 +19,16 @@ async def load_problem_node(state: ChatBotState) -> dict:
 
     # 데이터가 없을 경우에 대한 예외 처리
     if not paragraph_data:
-        raise ValueError(f"Qdrant에서 데이터를 찾을 수 없습니다. (ID: {problem_id}, Node: {paragraph_type})")
+        raise ValueError(f"Qdrant에서 데이터를 찾을 수 없습니다. (ID: {problem_id}, Type: {paragraph_type})")
+    
+    content = paragraph_data.get("content") if isinstance(paragraph_data, dict) else paragraph_data.content
 
-    print(f"✅ 지문 로드 성공: {paragraph_data['content'][:20]}...") # 성공 로그
+    print(f"✅ 지문 로드 성공: {content[:20]}...") # 성공 로그
 
     # 2. 조회된 데이터를 State 형식에 맞춰 반환
     # 반환되는 dict는 LangGraph에 의해 기존 State와 병합(merge)됩니다.
     return {
-        "content": paragraph_data.get("content"),
+        "content": content,
         "essential_keywords": paragraph_data.get("essential_keywords"),
         "chatbot_answer_guide": paragraph_data.get("chatbot_answer_guide"),
         "paragraph_order": paragraph_data.get("paragraph_order"),

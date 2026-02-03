@@ -1,6 +1,6 @@
 {
 	"problem_id": 3,
-  "title": "Previous Level",
+  "title": "국회의원 선거",
   "difficulty": 2,
   "problem_algorithm_tag": ["그리디 알고리즘", "우선순위 큐"],
   "answer_guides": [

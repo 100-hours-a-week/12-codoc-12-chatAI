@@ -28,7 +28,9 @@ llm = ChatGoogleGenerativeAI(
     model=settings.MODEL_NAME,
     temperature=settings.TEMPERATURE,
     api_key=settings.GOOGLE_API_KEY,
-    streaming=True
+    streaming=True,
+    max_retries=3,
+    timeout=60,
 )
 
 # Qdrant 클라이언트 초기화
