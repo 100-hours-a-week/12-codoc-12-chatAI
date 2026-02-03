@@ -22,3 +22,4 @@ tiktoken
 pytest
 
 sentence-transformers
+python-json-logger
