@@ -8,26 +8,27 @@ def define_graph():
     # 1. StateGraph 초기화
     workflow = StateGraph(ChatBotState)
 
-    # 2. 노드 등록 (도메인/nodes 폴더에서 가져온 함수들)
+    # 2. 노드 등록
     workflow.add_node("load_problem", load_problem_node)
-    workflow.add_node("tutor_question", tutor_node)
     workflow.add_node("analyze_answer", analyzer_node)
+    workflow.add_node("tutor_question", tutor_node)
 
-    # 3. 엣지 연결 (흐름 설계)
+    # 3. 엣지 연결 (흐름 재설계)
+    
     # 시작 -> 문제 데이터 로드
     workflow.set_entry_point("load_problem")
     
-    # 문제 로드 완료 -> 유저에게 질문 던지기
-    workflow.add_edge("load_problem", "tutor_question")
+    # 1단계: 문제를 먼저 로드합니다.
+    workflow.add_edge("load_problem", "analyze_answer")
     
-    # 유저 답변이 오면 분석 노드로 이동
-    # (실제 런타임에서는 유저 입력이 들어올 때까지 대기하다가 analyze로 넘어갑니다)
-    workflow.add_edge("tutor_question", "analyze_answer")
+    # 2단계: 유저의 답변을 분석하여 is_correct와 analysis_reason을 생성합니다.
+    # (첫 진입 시 유저 답변이 없다면 analyzer_node 내에서 pass 하도록 설계)
+    workflow.add_edge("analyze_answer", "tutor_question")
     
-    # 결과를 GET으로 반환
-    workflow.add_edge("analyze_answer", END)
+    # 3단계: 분석 결과를 바탕으로 튜터가 답변(SSE 스트리밍)을 생성합니다.
+    workflow.add_edge("tutor_question", END)
 
-    # 5. 그래프 컴파일
+    # 4. 그래프 컴파일
     return workflow.compile()
 
 # 외부(router.py)에서 사용할 그래프 인스턴스

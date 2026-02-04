@@ -26,6 +26,7 @@ class ChatBotController:
             initial_state : ChatBotState = {
                 "messages": [HumanMessage(content=request.user_message)],
                 "user_id": request.user_id,
+                "user_level": request.user_level,
                 "problem_id": request.problem_id,
                 "run_id": run_id,
                 "paragraph_type": request.paragraph_type if request.paragraph_type else "BACKGROUND",
@@ -64,22 +65,26 @@ class ChatBotController:
 
                 # 2. 토큰 스트리밍 (Tutor는 유저에게, Analyzer는 로그로)
                 elif kind == "on_chat_model_stream":
-                    token = event["data"]["chunk"].content
-                    if token:
+                    content = event["data"].get("chunk", None)
+                    if content and hasattr(content, 'content'):
+                        token = content.content
+                        # 튜터 노드의 응답만 클라이언트로 스트리밍
                         if node_name == "tutor_question":
                             accumulated_text += token
                             yield f'event: token\ndata: {json.dumps({"text": token}, ensure_ascii=False)}\n\n'
+                        # 분석 노드의 로그는 서버 콘솔에만 기록
                         elif node_name == "analyze_answer":
                             print(f"\033[94m[Analyzer Log]\033[0m {token}", end="", flush=True)
 
                 # 3. 분석 결과 처리
                 elif kind == "on_chain_end" and event["name"] == "analyze_answer":
-                    print("\n")
+                    print("\n[Analysis Complete]")
                     output = event["data"]["output"]
-                    is_correct = output.get("is_correct", False) if isinstance(output, dict) else False
-                    self.workflow_status[run_id]["is_correct"] = is_correct
-                    # analyzer_node에서 세팅한 current_answer 가져오기
-                    self.workflow_status[run_id]["current_answer"] = output.get("current_answer", "")
+                    # analyzer_node가 리턴한 dict 값들을 workflow_status에 업데이트
+                    if isinstance(output, dict):
+                        self.workflow_status[run_id]["is_correct"] = output.get("is_correct", False)
+                        self.workflow_status[run_id]["current_answer"] = output.get("current_answer", "")
+                        self.workflow_status[run_id]["analyzer_reason"] = output.get("analyzer_reason", "")
 
             # 4. 최종 결과 전송
             final_data = {
