@@ -9,6 +9,7 @@ class ChatBotState(TypedDict):
     
     # 2. 스프링 요청 데이터
     user_id: int
+    user_level: str
     problem_id: int
     run_id: int
     
@@ -20,7 +21,9 @@ class ChatBotState(TypedDict):
     # 4. 벡터 DB(Collection 1) 데이터
     content: str               # 문단 원문
     essential_keywords: str    # 정답 판단 기준
+    essential_summary: str     # 문단 요약
     chatbot_answer_guide: str  # 답변 가이드
     
     # 5. 상태 판단 필드
     is_correct: bool           # 정답 여부
+    analyzer_reason: Optional[str]  # 정답 판단 이유 (analyzer_node에서 설정)

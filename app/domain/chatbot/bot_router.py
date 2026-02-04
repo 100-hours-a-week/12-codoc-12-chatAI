@@ -23,7 +23,11 @@ async def chat(
     # 메세지 받고 백그라운드에서 워크플로우 실행
     
     run_id = post.run_id
-    bot_controller.workflow_status[run_id] = {"status": WorkflowStatus.ACCEPTED}    
+    bot_controller.workflow_status[run_id] = {
+        "status": WorkflowStatus.ACCEPTED,
+        "user_level": post.user_level,
+        "paragraph_type": post.paragraph_type if post.paragraph_type else "BACKGROUND"
+    }    
     background_tasks.add_task(bot_controller.execute_workflow, run_id, post) 
     
     return CommonResponse.success_response(
@@ -34,18 +38,22 @@ async def chat(
         )
     )
 
-@router.get("/{run_id}/stream", response_model=CommonResponse[Dict[str, Any]])
+@router.get("/{run_id}/stream")
 async def get_chat_stream(run_id: int):
     
     if run_id not in bot_controller.workflow_status:
-        return StreamingResponse(
-            content=iter([
-                f'event: error\ndata: {json.dumps({"code": "NOT_FOUND", "message": "워크플로우를 찾을 수 없습니다."}, ensure_ascii=False)}\n\n'
-            ]),
-            media_type="text/event-stream"
-        )
+            # 에러 메시지 생성기
+            async def error_generator():
+                yield f'event: error\ndata: {json.dumps({"code": "NOT_FOUND", "message": "워크플로우를 찾을 수 없습니다."}, ensure_ascii=False)}\n\n'
                 
-    return StreamingResponse(bot_controller.get_event_generator(run_id), media_type="text/event-stream")
+            return StreamingResponse(
+                error_generator(),
+                media_type="text/event-stream"
+            )
+                
+    return StreamingResponse(
+        bot_controller.get_event_generator(run_id), 
+        media_type="text/event-stream")
 
 # 워크플로우 취소 API 엔드포인트 추가
 # @router.delete("/{run_id}")

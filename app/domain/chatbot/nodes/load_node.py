@@ -29,7 +29,8 @@ async def load_problem_node(state: ChatBotState) -> dict:
     # 반환되는 dict는 LangGraph에 의해 기존 State와 병합(merge)됩니다.
     return {
         "content": content,
-        "essential_keywords": paragraph_data.get("essential_keywords"),
+        "essential_keywords": paragraph_data.get("essential_keywords" , []),
+        "essential_summary": paragraph_data.get("essential_summary", ""),
         "chatbot_answer_guide": paragraph_data.get("chatbot_answer_guide"),
         "paragraph_order": paragraph_data.get("paragraph_order"),
         "retry_count": 0  # 새로운 단계 진입 시 시도 횟수 초기화

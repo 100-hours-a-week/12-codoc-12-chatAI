@@ -17,6 +17,7 @@ class UserMsgCreateReq(BaseModel):
     user_message : str
     # session_id : int
     paragraph_type : str
+    user_level : str
     
 class UserMsgCreateRes(BaseModel):
     model_config = ConfigDict(

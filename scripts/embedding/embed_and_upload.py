@@ -101,6 +101,7 @@ def load_and_embed_json(file_path: str) -> List[PointStruct]:
             paragraph_type = guide.get("paragraph_type", "")
             content = guide.get("content", "")
             essential_keywords = guide.get("essential_keywords", [])
+            essential_summary = guide.get("essential_summary", "")
             chatbot_answer_guide = guide.get("chatbot_answer_guide", "")
             
             if not content:
@@ -119,7 +120,8 @@ def load_and_embed_json(file_path: str) -> List[PointStruct]:
                 "paragraph_type": paragraph_type,
                 "paragraph_order": idx,
                 "content": content,
-                "essential_keywords": " ".join(essential_keywords) if essential_keywords else "",
+                "essential_keywords": essential_keywords,
+                "essential_summary": essential_summary,
                 "chatbot_answer_guide": chatbot_answer_guide,
             }
             
