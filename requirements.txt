@@ -1,7 +1,25 @@
+# [FastAPI Core]
 fastapi[standard]
-langchain
+uvicorn
+python-dotenv
+pydantic
+httpx
+
+# [LangChain Framework]
+langchain>=0.3.0
+langchain-community>=0.3.0
+langchain-google-genai>=2.0.0
+google-genai>=0.3.0
 langchain-openai
 langchain-qdrant
+
+# [DB Client]
 qdrant-client
-python-dotenv
-uvicorn
+
+# [Utilities]
+pillow
+tiktoken
+pytest
+
+sentence-transformers
+python-json-logger

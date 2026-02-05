@@ -1,0 +1,36 @@
+{
+  "problem_id": 1,
+  "title": "Previous Level",
+  "difficulty": "1",
+  "problem_algorithm_tag": ["구현", "조건문"],
+  "answer_guides": [
+    {
+      "paragraph_type": "BACKGROUND",
+      "content": "메이플스토리라는 RPG 게임에는 레벨이 존재한다. 각각 만렙 = 300, 구만렙 = 275, 껌만렙 = 250이라는 용어가 존재한다.",
+      "chatbot_answer_guide": "단순한 게임 스토리가 아니라, 우리가 처리해야 할 데이터가 '특정 기준값(Threshold)'을 가진 정수들의 집합임을 인지시켜 주세요.",
+      "essential_summary": "주어진 레벨 데이터들은 단순한 숫자가 아니라, 300, 275, 250이라는 **임계값(Threshold)**을 기준으로 **분류(Classification)**해야 하는 정수 데이터이다.",
+      "essential_keywords": ["임계값(Threshold)", "분류(Classification)"]
+    },
+    {
+      "paragraph_type": "GOAL",
+      "content": "N개의 레벨 M이 주어질 때, 각 레벨이 속한 구간의 번호를 출력해 보자.",
+      "chatbot_answer_guide": "단순 출력이 아니라, 입력된 수치(Level)를 정해진 카테고리(1~4)로 변환(Mapping)하는 것이 최종 목표임을 알려주세요.",
+      "essential_summary": "연속적인 수치 데이터를 4개의 이산적인 구간 번호(1~4)로 변환하는 **매핑(Mapping)** 작업을 수행하여 출력한다.",
+      "essential_keywords": ["구간 번호(Section ID)", "매핑(Mapping)"]
+    },
+    {
+      "paragraph_type": "STRATEGY",
+      "content": "모든 레벨은 만렙(구간 1), 구만렙이상 만렙 미만(구간 2), 껌만렙이상 구만렙 미만(구간 3), 껌만렙 미만(구간 4)에 속하게 된다.",
+      "chatbot_answer_guide": "구간이 명확히 나뉘어 있으므로, 특정 범위를 체크하는 '다중 조건문(if-else if)' 기법을 사용해야 함을 힌트로 주세요.",
+      "essential_summary": "레벨이 높은 순서대로(300, 275, 250) 조건을 확인하며 내려가는 **조건문 분기(Conditional Branching)** 로직을 사용한다.",
+      "essential_keywords": ["조건문 분기(Conditional Branching)", "if-else if"]
+    },
+    {
+      "paragraph_type": "INSIGHT",
+      "content": "첫 번째 줄에는 레벨의 개수 N(1 ≤ N ≤ 100)이 주어진다. 두 번째 줄에는 N개의 레벨 M(1 ≤ M ≤ 300)이 공백으로 구분되어 주어진다.",
+      "chatbot_answer_guide": "N이 최대 100으로 매우 작으므로, 복잡한 최적화 없이 단순 반복문 O(N)으로도 시간 내에 충분히 해결 가능함을 검증해주세요.",
+      "essential_summary": "데이터 개수 $N$이 100 이하로 매우 작으므로, 별도의 최적화 없이 입력 순서대로 처리하는 **선형 탐색(Linear Search)**인 **O(N)** 알고리즘으로 충분하다.",
+      "essential_keywords": ["선형 탐색(Linear Search)", "O(N)"]
+    }
+  ]
+}

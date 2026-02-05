@@ -22,3 +22,9 @@ ENV/
 
 # VS Code 설정
 .vscode/
+
+# Copilot 설정 파일
+.copilot/
+
+# 5. Qdrant 로컬 벡터 DB 저장소 (개발 환경)
+qdrant_storage/

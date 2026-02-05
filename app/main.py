@@ -1,17 +1,67 @@
+import asyncio
 from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
+from contextlib import asynccontextmanager
+from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, VectorParams
 from langchain_core.prompts import ChatPromptTemplate
+from app.common.exceptions.exception_handler import register_exception_handlers
+from app.common.config import llm, settings
+from app.domain.chatbot.bot_router import router as bot_router
+from app.logging_config import setup_logging
+from app.middleware.request_logging import request_logging_middleware
+import os
 
-app = FastAPI()
+VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", "384"))
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print(f"서버 시작! Qdrant({settings.QDRANT_HOST}) 연결 체크 중...")  
+      
+    client = QdrantClient(
+        host=settings.QDRANT_HOST,
+        port=settings.QDRANT_PORT,
+        api_key=settings.QDRANT_API_KEY if settings.QDRANT_API_KEY else None,
+    )
+
+    if not client.collection_exists(settings.COLLECTION_NAME):
+        client.create_collection(
+            collection_name=settings.COLLECTION_NAME,
+            vectors_config=VectorParams(size=VECTOR_SIZE, distance=Distance.COSINE),
+        )
+        print(f"컬렉션 '{settings.COLLECTION_NAME}' 생성 완료!")
+    else:
+        print(f"컬렉션 '{settings.COLLECTION_NAME}'이 이미 존재합니다.")
+
+    yield # 여기서부터 서버 가동
+    
+    print("서버 종료")
+    
+docs_enabled = os.getenv("DOCS_ENABLED", "true").lower() == "true"
+    
+app = FastAPI(
+    title="CodoC",
+    
+    docs_url="/docs" if docs_enabled else None,
+    redoc_url="/redoc" if docs_enabled else None,
+    openapi_url="/openapi.json" if docs_enabled else None
+)
+
+# 요청 완료 시 JSON + 텍스트 로그 기록
+app.middleware("http")(request_logging_middleware)
+
+register_exception_handlers(app)
 
 @app.get("/")
 def read_root():
-    return {"message": "Server is running with Python 3.12!"}
+    return {"message": "Hello World!"} 
 
-@app.get("/test-langchain")
-def test_chain():
-    # LangChain 동작 테스트 (실제 LLM 호출 없이 구조만 확인)
-    prompt = ChatPromptTemplate.from_template("Tell me a joke about {topic}")
-    return {"prompt_preview": prompt.format(topic="coding")}
+@app.get("/healthcheck")
+def health_check():
+    return {"status": "ok"}
+
+app.include_router(bot_router, prefix="/api/v1")
 
 if __name__ == "__main__":
     import uvicorn
