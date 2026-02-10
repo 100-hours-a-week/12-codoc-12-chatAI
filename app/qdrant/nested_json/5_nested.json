@@ -2,7 +2,7 @@
   "problem_id": 5,
   "title": "Coins",
   "difficulty": "4",
-  "tags": ["동적 프로그래밍", "조합", "DP"],
+  "problem_algorithm_tag": ["다이나믹 프로그래밍", "조합론"],
   "answer_guides": [
     {
       "paragraph_type": "BACKGROUND",
