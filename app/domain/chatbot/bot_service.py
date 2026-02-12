@@ -1,8 +1,13 @@
 import asyncio
 import json
+import os
 from enum import Enum
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from langchain_core.messages import HumanMessage
+
+from langfuse import Langfuse
+langfuse_client = Langfuse()
+
 from .graph_builder import chatbot_graph
 from .bot_schemas import UserMsgCreateReq, UserMsgCreateRes
 from .bot_state import ChatBotState
@@ -19,10 +24,12 @@ class ChatBotService:
         # 실행 중인 상태 저장 (v2부터는 Redis 이용)
         self.workflow_status: Dict[str, Dict[str, Any]] = {}
 
-    async def run_and_stream(self, request: UserMsgCreateReq):
+    async def run_and_stream(self, request: UserMsgCreateReq, langfuse_handler=None, trace_id: str = None):
         """LangGraph 워크플로우를 실행하고 생성된 이벤트를 SSE 형식으로 즉시 반환"""
         
         run_id = request.run_id
+        
+        print(f"🔍 [Start] Trace ID: {trace_id}")
         
         initial_state : ChatBotState = {
             "messages": [HumanMessage(content=request.user_message)],
@@ -44,9 +51,17 @@ class ChatBotService:
         accumulated_text = ""
         
         try:
-            async for event in chatbot_graph.astream_events(initial_state, version="v2"):
+            # LangFuse 핸들러가 있으면 callbacks 리스트에 추가
+            callbacks = [langfuse_handler] if langfuse_handler else []
+            
+            async for event in chatbot_graph.astream_events(
+                initial_state, 
+                version="v2",
+                config={"callbacks": callbacks}
+            ):
                 kind = event["event"]
-                node_name = event.get("metadata", {}).get("langgraph_node", "")
+                node_metadata = event.get("metadata", {})
+                node_name = node_metadata.get("langgraph_node", "") if node_metadata else ""
                 
                 # 1. 노드 시작 알림
                 if kind == "on_chain_start" and event["name"] == "tutor_question":
@@ -88,6 +103,7 @@ class ChatBotService:
                     "is_correct": result_info.get("is_correct", False) if result_info else False
                 }
             }
+        
             yield f'event: final\ndata: {json.dumps(final_data, ensure_ascii=False)}\n\n'
         
         except asyncio.CancelledError:
@@ -105,6 +121,22 @@ class ChatBotService:
             yield f'event: error\ndata: {json.dumps({"code": "FAILED", "message": error_msg}, ensure_ascii=False)}\n\n'
             
         finally:
+            print(f"🏁 [Finally] Text Length: {len(accumulated_text)} / Trace ID: {trace_id}")
+            
+            if trace_id:
+                try:
+                    # 전역 클라이언트 사용
+                    langfuse_client.trace(id=trace_id).update(
+                        output=final_data if final_data else "No response generated"
+                    )
+                    langfuse_client.flush() # 전송 강제
+                    print("✅ Langfuse Output Updated Successfully")
+                except Exception as lf_e:
+                    print(f"🔥 Langfuse Update Failed: {lf_e}")
+                    # 혹시 인증키 문제인지 확인
+                    if not os.getenv("LANGFUSE_PUBLIC_KEY"):
+                        print("🔥 Warning: LANGFUSE_PUBLIC_KEY not found in env")
+            
             # 작업 종료 후 메모리 정리
             if run_id in self.workflow_status:
                 del self.workflow_status[run_id]
