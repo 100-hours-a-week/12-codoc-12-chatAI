@@ -12,6 +12,7 @@ langchain-google-genai>=2.0.0
 google-genai>=0.3.0
 langchain-openai
 langchain-qdrant
+langfuse==2.50.0
 
 # [DB Client]
 qdrant-client
