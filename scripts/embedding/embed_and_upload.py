@@ -91,7 +91,7 @@ def load_and_embed_json(file_path: str) -> List[PointStruct]:
         problem_id = doc.get("problem_id")
         title = doc.get("title", "")
         difficulty = int(doc.get("difficulty", 0)) if doc.get("difficulty") else 0
-        tags = doc.get("tags", [])
+        tags = doc.get("problem_algorithm_tag", [])
         
         print(f"  문제: {problem_id} - {title}")
         

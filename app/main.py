@@ -61,7 +61,7 @@ def read_root():
 def health_check():
     return {"status": "ok"}
 
-app.include_router(bot_router, prefix="/api/v1")
+app.include_router(bot_router, prefix="/api/v2")
 
 if __name__ == "__main__":
     import uvicorn
