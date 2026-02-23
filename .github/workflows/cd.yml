@@ -20,12 +20,12 @@ jobs:
     runs-on: ubuntu-latest
     env:
       IS_PROD: ${{ github.ref_name == 'main' }}
-      IS_DEV_BRANCH: ${{ github.ref_name == 'dev' }}
+      IS_DEV_BRANCH: ${{ (github.ref_name == 'dev' || github.ref_name == 'chore/migration') }}
       AWS_REGION: ${{ secrets.AWS_REGION }}
-      AWS_ACCESS_KEY_ID: ${{ github.ref_name == 'dev' && secrets.AWS_ACCESS_KEY_ID_DEV || secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ github.ref_name == 'dev' && secrets.AWS_SECRET_ACCESS_KEY_DEV || secrets.AWS_SECRET_ACCESS_KEY }}
-      AI_INSTANCE_ID: ${{ github.ref_name == 'dev' && secrets.AI_INSTANCE_ID_DEV || secrets.AI_INSTANCE_ID }}
-      AI_ENV: ${{ github.ref_name == 'dev' && secrets.AI_ENV_DEV || secrets.AI_ENV }}
+      AWS_ACCESS_KEY_ID: ${{ (github.ref_name == 'dev' || github.ref_name == 'chore/migration') && secrets.AWS_ACCESS_KEY_ID_DEV || secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ (github.ref_name == 'dev' || github.ref_name == 'chore/migration') && secrets.AWS_SECRET_ACCESS_KEY_DEV || secrets.AWS_SECRET_ACCESS_KEY }}
+      AI_INSTANCE_ID: ${{ (github.ref_name == 'dev' || github.ref_name == 'chore/migration') && secrets.AI_INSTANCE_ID_DEV || secrets.AI_INSTANCE_ID }}
+      AI_ENV: ${{ (github.ref_name == 'dev' || github.ref_name == 'chore/migration') && secrets.AI_ENV_DEV || secrets.AI_ENV }}
 
     steps:
       # 1) AWS 인증
