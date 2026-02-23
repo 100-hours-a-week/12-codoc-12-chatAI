@@ -18,8 +18,12 @@ class Settings:
     QDRANT_HOST: str = os.getenv("QDRANT_HOST", "localhost")
     QDRANT_PORT: int = int(os.getenv("QDRANT_PORT", "6333"))
     QDRANT_API_KEY: str = os.getenv("QDRANT_API_KEY", "")
+    QDRANT_SECONDARY_HOST: str = os.getenv("QDRANT_SECONDARY_HOST", "")
+    QDRANT_SECONDARY_PORT: int = int(os.getenv("QDRANT_SECONDARY_PORT", "0") or 0)
+    QDRANT_SECONDARY_API_KEY: str = os.getenv("QDRANT_SECONDARY_API_KEY", "")
     COLLECTION_NAME: str = os.getenv("COLLECTION_NAME", "Problems")
     VECTOR_SIZE: int = int(os.getenv("VECTOR_SIZE", "384"))
+    USER_MEMORIES_COLLECTION: str = os.getenv("USER_MEMORIES_COLLECTION", "user_memories")
     
 settings = Settings()
 
@@ -38,6 +42,7 @@ qdrant_client = QdrantClient(
     host=settings.QDRANT_HOST,
     port=settings.QDRANT_PORT,
     api_key=settings.QDRANT_API_KEY if settings.QDRANT_API_KEY else None,
+    https=False,
 )
 
 QDRANT_URL = f"http://{settings.QDRANT_HOST}:{settings.QDRANT_PORT}"

@@ -8,9 +8,13 @@ from langchain_core.prompts import ChatPromptTemplate
 from app.common.exceptions.exception_handler import register_exception_handlers
 from app.common.config import llm, settings
 from app.domain.chatbot.bot_router import router as bot_router
+from app.domain.user_memories.user_router import router as user_memories_router
 from app.logging_config import setup_logging
 from app.middleware.request_logging import request_logging_middleware
 import os
+import threading
+from app.qdrant.drain_worker import run_forever as _run_drain_worker
+ENABLE_DRAIN_WORKER = os.getenv("ENABLE_DRAIN_WORKER", "false").lower() == "true"
 
 VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", "384"))
 
@@ -23,6 +27,7 @@ async def lifespan(app: FastAPI):
         host=settings.QDRANT_HOST,
         port=settings.QDRANT_PORT,
         api_key=settings.QDRANT_API_KEY if settings.QDRANT_API_KEY else None,
+        https=False,
     )
 
     if not client.collection_exists(settings.COLLECTION_NAME):
@@ -62,6 +67,16 @@ def health_check():
     return {"status": "ok"}
 
 app.include_router(bot_router, prefix="/api/v2")
+app.include_router(user_memories_router, prefix="/api/v2")
+
+
+# start drain worker thread
+def _start_drain_worker():
+    t = threading.Thread(target=_run_drain_worker, daemon=True)
+    t.start()
+
+if ENABLE_DRAIN_WORKER:
+    _start_drain_worker()
 
 if __name__ == "__main__":
     import uvicorn
