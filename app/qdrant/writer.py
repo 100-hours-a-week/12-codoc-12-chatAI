@@ -1,10 +1,13 @@
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Iterable, Optional
 
 from qdrant_client import QdrantClient, models
 
 from app.common.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def _now_iso() -> str:
@@ -91,9 +94,9 @@ class QdrantWriter:
         try:
             with open(self.retry_log_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(payload, ensure_ascii=False) + "\n")
-        except Exception:
+        except Exception as exc:  # noqa: BLE001
             # 로깅 실패는 상위로 전파하지 않음
-            pass
+            logger.exception("retry log write failed: %s", self.retry_log_path, exc_info=exc)
 
 
 def build_writer() -> QdrantWriter:
