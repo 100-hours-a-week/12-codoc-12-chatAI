@@ -45,7 +45,7 @@ def upsert_user_memory(req: user_schemas.UserMemoryUpsertReq):
         except Exception as exc:  # noqa: BLE001
             # write-stop/전환 구간 실패는 재시도 로그에 적재
             try:
-            _writer._append_retry_log(collection, [point], exc, target="primary")
+                _writer._append_retry_log(collection, [point], exc, target="primary")
             except Exception:
                 pass
 
