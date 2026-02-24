@@ -27,7 +27,14 @@ def _extract_run_id(points: Iterable[models.PointStruct]) -> Optional[str]:
 def _point_ids(points: Iterable[models.PointStruct]) -> list[str]:
     return [str(p.id) for p in points]
 
-def _log_obs(event: str, target: str, collection: str, points: Iterable[models.PointStruct], exc: Optional[Exception] = None) -> None:
+def _log_obs(
+    event: str,
+    target: str,
+    collection: str,
+    points: Iterable[models.PointStruct],
+    exc: Optional[Exception] = None,
+    endpoint: Optional[dict[str, str | int]] = None,
+) -> None:
     if not OBS_ENABLED:
         return
     pts = list(points)
@@ -40,6 +47,8 @@ def _log_obs(event: str, target: str, collection: str, points: Iterable[models.P
         "run_id": _extract_run_id(pts),
         "error": str(exc) if exc else None,
     }
+    if endpoint:
+        payload["endpoint"] = endpoint
     logger.info("QDRANT_OBS %s", json.dumps(payload, ensure_ascii=False))
 
 
@@ -54,10 +63,18 @@ class QdrantWriter:
         primary: QdrantClient,
         secondary: Optional[QdrantClient],
         retry_log_path: str = "/tmp/qdrant_retry.log",
+        primary_host: str = "",
+        primary_port: int = 0,
+        secondary_host: str = "",
+        secondary_port: int = 0,
     ):
         self.primary = primary
         self.secondary = secondary
         self.retry_log_path = retry_log_path
+        self.primary_host = primary_host
+        self.primary_port = primary_port
+        self.secondary_host = secondary_host
+        self.secondary_port = secondary_port
 
     def is_already_exists_error(self, exc: Exception) -> bool:
         msg = str(exc).lower()
@@ -95,10 +112,23 @@ class QdrantWriter:
         # primary 동기 write
         try:
             self.primary.upsert(collection_name=collection_name, points=points)
-            _log_obs("write_ok", "primary", collection_name, points)
+            _log_obs(
+                "write_ok",
+                "primary",
+                collection_name,
+                points,
+                endpoint={"host": self.primary_host, "port": self.primary_port},
+            )
         except Exception as exc:  # noqa: BLE001
             # 컷오버 중 클라이언트 실패 방지를 위해 primary 실패는 큐잉
-            _log_obs("write_err", "primary", collection_name, points, exc)
+            _log_obs(
+                "write_err",
+                "primary",
+                collection_name,
+                points,
+                exc,
+                endpoint={"host": self.primary_host, "port": self.primary_port},
+            )
             self._append_retry_log(collection_name, points, exc, target="primary")
             return
 
@@ -108,9 +138,22 @@ class QdrantWriter:
 
         try:
             self.secondary.upsert(collection_name=collection_name, points=points)
-            _log_obs("write_ok", "secondary", collection_name, points)
+            _log_obs(
+                "write_ok",
+                "secondary",
+                collection_name,
+                points,
+                endpoint={"host": self.secondary_host, "port": self.secondary_port},
+            )
         except Exception as exc:  # noqa: BLE001
-            _log_obs("write_err", "secondary", collection_name, points, exc)
+            _log_obs(
+                "write_err",
+                "secondary",
+                collection_name,
+                points,
+                exc,
+                endpoint={"host": self.secondary_host, "port": self.secondary_port},
+            )
             self._append_retry_log(collection_name, points, exc, target="secondary")
 
     def _append_retry_log(
@@ -158,4 +201,12 @@ def build_writer() -> QdrantWriter:
             https=False,
         )
 
-    return QdrantWriter(primary=primary, secondary=secondary, retry_log_path=retry_log_path)
+    return QdrantWriter(
+        primary=primary,
+        secondary=secondary,
+        retry_log_path=retry_log_path,
+        primary_host=settings.QDRANT_HOST,
+        primary_port=settings.QDRANT_PORT,
+        secondary_host=secondary_host,
+        secondary_port=secondary_port,
+    )
