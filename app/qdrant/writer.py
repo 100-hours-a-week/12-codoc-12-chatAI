@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Iterable, Optional
 
@@ -8,10 +9,38 @@ from qdrant_client import QdrantClient, models
 from app.common.config import settings
 
 logger = logging.getLogger(__name__)
+OBS_ENABLED = os.getenv("QDRANT_OBS", "false").lower() == "true"
 
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+def _extract_run_id(points: Iterable[models.PointStruct]) -> Optional[str]:
+    for p in points:
+        payload = getattr(p, "payload", None) or {}
+        tags = payload.get("tags") or []
+        for t in tags:
+            if isinstance(t, str) and t.startswith("run="):
+                return t.split("=", 1)[1]
+    return None
+
+def _point_ids(points: Iterable[models.PointStruct]) -> list[str]:
+    return [str(p.id) for p in points]
+
+def _log_obs(event: str, target: str, collection: str, points: Iterable[models.PointStruct], exc: Optional[Exception] = None) -> None:
+    if not OBS_ENABLED:
+        return
+    pts = list(points)
+    payload = {
+        "ts": _now_iso(),
+        "event": event,
+        "target": target,
+        "collection": collection,
+        "point_ids": _point_ids(pts),
+        "run_id": _extract_run_id(pts),
+        "error": str(exc) if exc else None,
+    }
+    logger.info("QDRANT_OBS %s", json.dumps(payload, ensure_ascii=False))
 
 
 class QdrantWriter:
@@ -62,12 +91,15 @@ class QdrantWriter:
                     raise
 
     def upsert(self, collection_name: str, points: Iterable[models.PointStruct]) -> None:
+        points = list(points)
         # primary 동기 write
         try:
             self.primary.upsert(collection_name=collection_name, points=points)
+            _log_obs("write_ok", "primary", collection_name, points)
         except Exception as exc:  # noqa: BLE001
             # 컷오버 중 클라이언트 실패 방지를 위해 primary 실패는 큐잉
-            self._append_retry_log(collection_name, points, exc)
+            _log_obs("write_err", "primary", collection_name, points, exc)
+            self._append_retry_log(collection_name, points, exc, target="primary")
             return
 
         # secondary best-effort write
@@ -76,18 +108,23 @@ class QdrantWriter:
 
         try:
             self.secondary.upsert(collection_name=collection_name, points=points)
+            _log_obs("write_ok", "secondary", collection_name, points)
         except Exception as exc:  # noqa: BLE001
-            self._append_retry_log(collection_name, points, exc)
+            _log_obs("write_err", "secondary", collection_name, points, exc)
+            self._append_retry_log(collection_name, points, exc, target="secondary")
 
     def _append_retry_log(
         self,
         collection_name: str,
         points: Iterable[models.PointStruct],
         exc: Exception,
+        target: str = "secondary",
     ) -> None:
+        points = list(points)
         payload = {
             "ts": _now_iso(),
             "collection": collection_name,
+            "target": target,
             "error": str(exc),
             "points": [p.model_dump() for p in points],
         }
@@ -100,6 +137,7 @@ class QdrantWriter:
 
 
 def build_writer() -> QdrantWriter:
+    retry_log_path = os.getenv("QDRANT_RETRY_LOG", "/tmp/qdrant_retry.log")
     primary = QdrantClient(
         host=settings.QDRANT_HOST,
         port=settings.QDRANT_PORT,
@@ -120,4 +158,4 @@ def build_writer() -> QdrantWriter:
             https=False,
         )
 
-    return QdrantWriter(primary=primary, secondary=secondary)
+    return QdrantWriter(primary=primary, secondary=secondary, retry_log_path=retry_log_path)

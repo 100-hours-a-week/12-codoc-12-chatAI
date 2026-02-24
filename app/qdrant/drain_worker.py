@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import time
 from typing import List
@@ -7,6 +8,8 @@ from qdrant_client import QdrantClient, models
 
 from app.common.config import settings
 
+logger = logging.getLogger(__name__)
+OBS_ENABLED = os.getenv("QDRANT_OBS", "false").lower() == "true"
 RETRY_LOG_PATH = os.getenv("QDRANT_RETRY_LOG", "/tmp/qdrant_retry.log")
 RETRY_PROCESSING_PATH = RETRY_LOG_PATH + ".processing"
 ENABLE_DRAIN_WORKER = os.getenv("ENABLE_DRAIN_WORKER", "false").lower() == "true"
@@ -76,6 +79,31 @@ def _parse_points(items):
         points.append(models.PointStruct(**p))
     return points
 
+def _extract_run_id(points):
+    for p in points:
+        payload = getattr(p, "payload", None) or {}
+        tags = payload.get("tags") or []
+        for t in tags:
+            if isinstance(t, str) and t.startswith("run="):
+                return t.split("=", 1)[1]
+    return None
+
+def _point_ids(points):
+    return [str(p.id) for p in points]
+
+def _log_obs(event: str, collection: str, points, exc: Exception | None = None) -> None:
+    if not OBS_ENABLED:
+        return
+    payload = {
+        "ts": time.time(),
+        "event": event,
+        "target": "secondary",
+        "collection": collection,
+        "point_ids": _point_ids(points),
+        "run_id": _extract_run_id(points),
+        "error": str(exc) if exc else None,
+    }
+    logger.info("QDRANT_OBS %s", json.dumps(payload, ensure_ascii=False))
 
 def drain_once(client: QdrantClient) -> int:
     processing_path = _acquire_processing_file()
@@ -93,6 +121,8 @@ def drain_once(client: QdrantClient) -> int:
         if processed >= MAX_BATCH:
             remaining.append(line)
             continue
+        collection = None
+        points = []
         try:
             payload = json.loads(line)
             collection = payload.get("collection")
@@ -100,11 +130,16 @@ def drain_once(client: QdrantClient) -> int:
             if collection and points:
                 _ensure_user_memories_collection(client, collection)
                 client.upsert(collection_name=collection, points=points)
+                _log_obs("drain_ok", collection, points)
                 processed += 1
             else:
                 remaining.append(line)
-        except Exception:
+        except Exception as exc:
             # 실패 라인은 다음 재시도 대상
+            try:
+                _log_obs("drain_err", collection or "unknown", points or [], exc)
+            except Exception:
+                pass
             remaining.append(line)
 
     # 남은 라인은 메인 로그에 append하여 신규 기록을 덮어쓰지 않음
