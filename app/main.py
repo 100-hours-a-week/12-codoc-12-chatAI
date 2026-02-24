@@ -18,6 +18,9 @@ ENABLE_DRAIN_WORKER = os.getenv("ENABLE_DRAIN_WORKER", "false").lower() == "true
 
 VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", "384"))
 
+# Ensure root logger is configured before any requests are handled
+setup_logging()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
