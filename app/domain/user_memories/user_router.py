@@ -33,7 +33,14 @@ def upsert_user_memory(req: user_schemas.UserMemoryUpsertReq):
         point = models.PointStruct(id=point_id, vector=req.vector, payload=payload)
 
         try:
-            _writer.ensure_collection(collection, settings.VECTOR_SIZE)
+            try:
+                _writer.ensure_collection(collection, settings.VECTOR_SIZE)
+            except Exception as exc:  # noqa: BLE001
+                if not _writer.is_already_exists_error(exc):
+                    _writer._append_retry_log(collection, [point], exc)
+                return CommonResponse.success_response(
+                    message="queued", data=user_schemas.UserMemoryUpsertRes(point_id=point_id)
+                )
             _writer.upsert(collection_name=collection, points=[point])
         except Exception as exc:  # noqa: BLE001
             # write-stop/전환 구간 실패는 재시도 로그에 적재

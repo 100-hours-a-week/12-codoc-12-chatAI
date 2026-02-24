@@ -27,22 +27,36 @@ class QdrantWriter:
         self.secondary = secondary
         self.retry_log_path = retry_log_path
 
+    def is_already_exists_error(self, exc: Exception) -> bool:
+        msg = str(exc).lower()
+        return "already exists" in msg
+
     def ensure_collection(self, collection_name: str, vector_size: int) -> None:
         if not self.primary.collection_exists(collection_name):
-            self.primary.create_collection(
-                collection_name=collection_name,
-                vectors_config=models.VectorParams(
-                    size=vector_size, distance=models.Distance.COSINE
-                ),
-            )
+            try:
+                self.primary.create_collection(
+                    collection_name=collection_name,
+                    vectors_config=models.VectorParams(
+                        size=vector_size, distance=models.Distance.COSINE
+                    ),
+                )
+            except Exception as exc:  # noqa: BLE001
+                # already exists race -> ignore
+                if not self.is_already_exists_error(exc):
+                    raise
 
         if self.secondary and not self.secondary.collection_exists(collection_name):
-            self.secondary.create_collection(
-                collection_name=collection_name,
-                vectors_config=models.VectorParams(
-                    size=vector_size, distance=models.Distance.COSINE
-                ),
-            )
+            try:
+                self.secondary.create_collection(
+                    collection_name=collection_name,
+                    vectors_config=models.VectorParams(
+                        size=vector_size, distance=models.Distance.COSINE
+                    ),
+                )
+            except Exception as exc:  # noqa: BLE001
+                # already exists race -> ignore
+                if not self.is_already_exists_error(exc):
+                    raise
 
     def upsert(self, collection_name: str, points: Iterable[models.PointStruct]) -> None:
         # primary 동기 write

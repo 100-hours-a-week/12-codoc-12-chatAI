@@ -53,6 +53,23 @@ def _make_client() -> QdrantClient:
     return QdrantClient(host=host, port=port, api_key=key if key else None, https=False)
 
 
+def _ensure_user_memories_collection(client: QdrantClient, collection: str) -> None:
+    if collection != settings.USER_MEMORIES_COLLECTION:
+        return
+    if client.collection_exists(collection):
+        return
+    try:
+        client.create_collection(
+            collection_name=collection,
+            vectors_config=models.VectorParams(
+                size=settings.VECTOR_SIZE, distance=models.Distance.COSINE
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001
+        if "already exists" not in str(exc).lower():
+            raise
+
+
 def _parse_points(items):
     points = []
     for p in items:
@@ -81,6 +98,7 @@ def drain_once(client: QdrantClient) -> int:
             collection = payload.get("collection")
             points = _parse_points(payload.get("points", []))
             if collection and points:
+                _ensure_user_memories_collection(client, collection)
                 client.upsert(collection_name=collection, points=points)
                 processed += 1
             else:
