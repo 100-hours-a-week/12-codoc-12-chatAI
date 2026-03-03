@@ -20,14 +20,14 @@ import uuid
 load_dotenv()
 
 # ==================== 설정 ====================
-QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
+QDRANT_HOST = os.getenv("QDRANT_HOST", "dev.codoc.cloud")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "")
 COLLECTION_NAME = os.getenv("COLLECTION_NAME", "Problems")
-VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", "384"))
+VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", "1024"))
 
 QDRANT_URL = f"http://{QDRANT_HOST}:{QDRANT_PORT}"
-MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+MODEL_NAME = "BAAI/bge-m3"
 
 # ==================== 초기화 ====================
 print("🔧 초기화 중...")

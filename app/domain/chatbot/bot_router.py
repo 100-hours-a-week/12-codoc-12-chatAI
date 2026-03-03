@@ -1,6 +1,6 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, BackgroundTasks
 from fastapi.responses import StreamingResponse
-from app.domain.chatbot.bot_service import bot_service, WorkflowStatus
+from app.domain.chatbot.bot_service import bot_service
 from app.common.config import llm
 from app.common.api_response import CommonResponse
 from .graph_builder import chatbot_graph 
@@ -28,7 +28,6 @@ async def chat(post : bot_schemas.UserMsgCreateReq):
         tags=["chatbot", "dev"]
     )
     
-    current_handler = langfuse_context.get_current_langchain_handler()
     trace_id = langfuse_context.get_current_trace_id()
 
     sse_headers = {
@@ -36,18 +35,28 @@ async def chat(post : bot_schemas.UserMsgCreateReq):
         "Connection": "keep-alive"
     }
     
-    
     return StreamingResponse(
-        bot_service.run_and_stream(post, langfuse_handler=current_handler, trace_id=trace_id),
+        bot_service.run_and_stream(post, trace_id=trace_id),
         media_type="text/event-stream",
         headers=sse_headers
     )
 
-# 워크플로우 취소 API 엔드포인트 추가
-# @router.delete("/{run_id}")
-# async def cancel_workflow(run_id: int):
-#     if run_id in bot_controller.workflow_status:
-#         bot_controller.workflow_status[run_id]["status"] = WorkflowStatus.CANCELED
-#         return CommonResponse.success_response(message="워크플로우가 취소되었습니다.")
-#     else:
-#         return CommonResponse.error_response(code="NOT_FOUND", message="워크플로우를 찾을 수 없습니다.")
+@router.delete("/{run_id}")
+async def cancel_workflow(run_id: int):
+    if bot_service.cancel_run(run_id):
+        return CommonResponse.success_response(message="워크플로우가 취소되었습니다.")
+    else:
+        return CommonResponse.fail_response(code="NOT_FOUND", message="워크플로우를 찾을 수 없습니다.")
+
+@router.post("/sessions", response_model=CommonResponse[bot_schemas.ExpireSessionRes])
+async def expire_session(
+    post: bot_schemas.ExpireSessionReq, 
+    background_tasks: BackgroundTasks
+):
+    background_tasks.add_task(
+        bot_service.from_redis_to_user_memories,
+        session_id=post.session_id, 
+        user_id=post.user_id, 
+        problem_id=post.problem_id
+    )
+    return CommonResponse.success_response(message="세션이 만료되어 Redis에서 User Memories로 이동하는 작업이 백그라운드에서 처리됩니다.")
