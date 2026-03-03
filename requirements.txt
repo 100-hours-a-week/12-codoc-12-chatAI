@@ -18,7 +18,7 @@ langchain-google-genai>=2.0.0
 google-genai>=0.3.0
 
 # [HuggingFace & ML]
-huggingface-hub>=-.33.4, <1.0.0
+huggingface-hub>=0.33.4, <1.0.0
 transformers<5.0.0
 sentence-transformers
 
