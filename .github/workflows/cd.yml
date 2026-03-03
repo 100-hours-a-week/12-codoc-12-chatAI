@@ -2,7 +2,7 @@ name: ai-cd
 
 on:
   push:
-    branches: [chore/chatai-cicd]
+    branches: [dev, main]
   workflow_dispatch: {}
 
 permissions:
@@ -21,11 +21,11 @@ jobs:
     needs: [ci]
     runs-on: ubuntu-latest
     env:
-      AWS_REGION: ${{ (github.ref_name == 'dev' || github.ref_name == 'chore/chatai-cicd') && secrets.AWS_REGION_DEV || secrets.AWS_REGION }}
-      CODEDEPLOY_APP: ${{ (github.ref_name == 'dev' || github.ref_name == 'chore/chatai-cicd') && secrets.CODEDEPLOY_APP_DEV || secrets.CODEDEPLOY_APP }}
-      CODEDEPLOY_GROUP: ${{ (github.ref_name == 'dev' || github.ref_name == 'chore/chatai-cicd') && secrets.CODEDEPLOY_GROUP_DEV || secrets.CODEDEPLOY_GROUP }}
-      S3_BUCKET: ${{ (github.ref_name == 'dev' || github.ref_name == 'chore/chatai-cicd') && secrets.DEPLOY_BUCKET_DEV || secrets.DEPLOY_BUCKET }}
-      S3_KEY: ${{ (github.ref_name == 'dev' || github.ref_name == 'chore/chatai-cicd') && secrets.DEPLOY_KEY_DEV || secrets.DEPLOY_KEY }}
+      AWS_REGION: ${{ github.ref_name == 'dev' && secrets.AWS_REGION_DEV || secrets.AWS_REGION }}
+      CODEDEPLOY_APP: ${{ github.ref_name == 'dev' && secrets.CODEDEPLOY_APP_DEV || secrets.CODEDEPLOY_APP }}
+      CODEDEPLOY_GROUP: ${{ github.ref_name == 'dev' && secrets.CODEDEPLOY_GROUP_DEV || secrets.CODEDEPLOY_GROUP }}
+      S3_BUCKET: ${{ github.ref_name == 'dev' && secrets.DEPLOY_BUCKET_DEV || secrets.DEPLOY_BUCKET }}
+      S3_KEY: ${{ github.ref_name == 'dev' && secrets.DEPLOY_KEY_DEV || secrets.DEPLOY_KEY }}
 
     steps:
       - name: Checkout
