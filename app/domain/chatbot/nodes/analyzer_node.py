@@ -1,7 +1,7 @@
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from app.domain.chatbot.bot_state import ChatBotState
-from app.common.config import llm
+from app.common.config import chatbot
 import asyncio
 
 # semantic 판단을 위한 전용 프롬프트 설계
@@ -83,7 +83,7 @@ async def analyzer_node(state: ChatBotState) -> dict:
         """
         
     # 1. 분석용 체인 구성 (JSON 출력 강제)
-    chain = ANALYZER_PROMPT | llm | JsonOutputParser()
+    chain = ANALYZER_PROMPT | chatbot | JsonOutputParser()
     
     # ainvoke에 전달할 공통 인자 설정
     invoke_params = {
