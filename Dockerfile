@@ -1,14 +1,21 @@
-# 파이썬 3.12 버전 환경을 가져옴
-FROM python:3.12-slim
+# 런타임만 남기기 위해 빌드/런타임 분리
+FROM python:3.12-slim AS builder
 
 # 작업 폴더를 /app으로 설정
 WORKDIR /app
 
-# 필요한 라이브러리 목록을 복사하고 설치
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
-# 현재 폴더의 모든 소스 코드를 도커 내부로 복사
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+COPY --from=builder /install /usr/local
+
 COPY . .
 
 # 서버 실행(main.py 실행)

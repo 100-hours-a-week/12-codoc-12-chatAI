@@ -1,12 +1,12 @@
 name: ai-ci
 
 on:
-  # pull_request:
-  #   branches: [dev, main]
-  # push:
-  #   branches: [dev]
+  workflow_call: {}
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
   workflow_dispatch: {}
-  workflow_call:
 
 permissions:
   contents: read
@@ -16,15 +16,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
+  build-test:
     runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ${{ github.ref_name == 'dev' && secrets.AWS_REGION_DEV || secrets.AWS_REGION }}
+      ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+      ECR_REPO: ${{ secrets.ECR_REPO }}
+      IMAGE_TAG: ${{ github.sha }}
+      ENV_TAG: ${{ github.ref_name == 'main' && 'prod' || 'dev' }}
 
     steps:
-      # 체크아웃
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 파이썬 설정
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
@@ -34,7 +38,6 @@ jobs:
             requirements.txt
             requirements-dev.txt
 
-      # 의존성 설치
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
@@ -42,90 +45,51 @@ jobs:
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
           pip install ruff build
 
-      # # 린트
-      # - name: Lint
-      #   run: ruff check .
-
-      # # 포맷 체크
-      # - name: Format Check
-      #   run: ruff format --check .
-
-      # # 테스트
-      # - name: Tests
-      #   run: |
-      #     if python -c "import importlib.util; import sys; sys.exit(0 if importlib.util.find_spec('pytest') else 1)"; then
-      #       pytest -q
-      #     else
-      #       echo "pytest not installed. Skipping tests."
-      #     fi
-
       # 의존성 감사(warn-only)
       - name: Dependency Audit
         run: |
           pip install pip-audit
           pip-audit -l || true
 
-      # # 패키징(main만)
-      # - name: Build
-      #   if: github.event_name == 'push' && github.ref == 'refs/heads/chore/ci-cd'
-      #   run: |
-      #     python -m build
-      #     ls -al dist
-
-      # # 아티팩트 업로드(main만)
-      # - name: Upload Artifact
-      #   if: github.event_name == 'push' && github.ref == 'refs/heads/chore/ci-cd'
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: ai-dist-${{ github.sha }}
-      #     path: dist/*
-      #     if-no-files-found: error
-      #     retention-days: 7
-
-      # 6. 소스 아티팩트 업로드
-      - name: Upload source artifact
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
+      - name: Configure AWS Credentials
+        if: (github.event_name == 'workflow_dispatch') || ((github.event_name == 'push') && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          name: ai-source-${{ github.sha }}
-          path: ./
-          retention-days: 7
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Notify Discord (always)
+      - name: Login to ECR
+        if: (github.event_name == 'workflow_dispatch') || ((github.event_name == 'push') && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
+        run: |
+          aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+
+      - name: Build & Push Image
+        if: (github.event_name == 'workflow_dispatch') || ((github.event_name == 'push') && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
+        run: |
+          IMAGE="$ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG"
+          IMAGE_ENV="$ECR_REGISTRY/$ECR_REPO:$ENV_TAG"
+          docker build -t "$IMAGE" -t "$IMAGE_ENV" .
+          docker push "$IMAGE"
+          docker push "$IMAGE_ENV"
+
+      - name: Notify Discord
         if: always()
         run: |
-          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          BRANCH="${{ github.ref_name }}"
-          EVENT="${{ github.event_name }}"
-          ACTOR="${{ github.actor }}"
-          SHA="${{ github.sha }}"
-          COMMIT_MSG="${{ github.event.head_commit.message }}"
-
-          if [ -z "$COMMIT_MSG" ]; then
-            COMMIT_MSG="(커밋 메시지를 이벤트에서 가져올 수 없음)"
-          fi
-
-          # 역슬래시, 큰따옴표, 그리고 줄바꿈(\n)을 JSON 규격에 맞게 이스케이프 처리
-          COMMIT_MSG_ESCAPED=$(printf '%s' "$COMMIT_MSG" | sed 's/\\/\\\\/g; s/\"/\\\"/g; :a;N;$!ba;s/\n/\\n/g')
-
-          if [ "${{ job.status }}" = "success" ]; then
-            STATUS="성공"
-            COLOR="65280"
-          else
-            STATUS="실패"
-            COLOR="16711680"
-          fi
+          STATUS="${{ job.status == 'success' && '성공' || '실패' }}"
+          COLOR="${{ job.status == 'success' && '65280' || '16711680' }}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
           curl -X POST -H "Content-Type: application/json" \
-          -d "{
-            \"embeds\": [{
-              \"title\": \"[AI] CI 결과 알림\",
-              \"description\": \"**상태**: ${STATUS}\\n**브랜치**: ${BRANCH}\\n**담당자**: ${ACTOR}\",
-              \"color\": ${COLOR},
-              \"fields\": [
-                {\"name\": \"커밋 메시지\", \"value\": \"${COMMIT_MSG_ESCAPED}\"},
-                {\"name\": \"로그\", \"value\": \"${RUN_URL}\"}
+          -d '{
+            "embeds": [{
+              "title": "AI CI 결과",
+              "description": "상태: '"${STATUS}"'\n브랜치: ${{ github.ref_name }}\n담당자: ${{ github.actor }}",
+              "color": '"${COLOR}"',
+              "fields": [
+                {"name": "커밋 메시지", "value": "${{ github.event.head_commit.message || 'Manual Trigger' }}"},
+                {"name": "로그 확인", "value": "'"${RUN_URL}"'"}
               ]
             }]
-          }" \
+          }' \
           ${{ secrets.DISCORD_WEBHOOK }}
