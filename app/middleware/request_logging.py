@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import time
@@ -31,6 +32,19 @@ async def request_logging_middleware(request: Request, call_next: Callable) -> R
     stacktrace = None
     status_code = 500
     message = "Request processed"
+    body_payload: object | None = None
+
+    try:
+        body_bytes = await request.body()
+        request._body = body_bytes  # allow downstream handlers to read again
+        if body_bytes:
+            body_text = body_bytes.decode("utf-8", errors="replace")
+            try:
+                body_payload = json.loads(body_text)
+            except json.JSONDecodeError:
+                body_payload = {"_raw": body_text}
+    except Exception:  # noqa: BLE001
+        body_payload = {"_raw": "<failed to read body>"}
 
     try:
         response = await call_next(request)
@@ -58,7 +72,9 @@ async def request_logging_middleware(request: Request, call_next: Callable) -> R
             "context": {
                 "user_id": user_id or None,
                 "client_ip": None,  # PII 보호
-                "extra": {},
+                "extra": {
+                    "body": body_payload,
+                },
             },
             "error": {
                 "type": error_type,
