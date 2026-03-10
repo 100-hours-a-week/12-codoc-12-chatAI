@@ -2,6 +2,7 @@ import asyncio
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from contextlib import asynccontextmanager
+from prometheus_fastapi_instrumentator import Instrumentator
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams
 from langchain_core.prompts import ChatPromptTemplate
@@ -47,6 +48,9 @@ app = FastAPI(
     redoc_url="/redoc" if docs_enabled else None,
     openapi_url="/openapi.json" if docs_enabled else None
 )
+
+# Prometheus metrics
+Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
 # 요청 완료 시 JSON + 텍스트 로그 기록
 app.middleware("http")(request_logging_middleware)
