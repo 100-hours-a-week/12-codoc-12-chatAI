@@ -73,7 +73,6 @@ jobs:
               "export APP_ENV_PATH='/home/ubuntu/app/.env'",
               "export APP_ENV_CONTENT_BASE64='${APP_ENV_CONTENT_BASE64}'",
               "nohup bash '${DEV_DEPLOY_SCRIPT_PATH}' > /home/ubuntu/codoc/logs/chat-dev-deploy.log 2>&1 < /dev/null &",
-              "echo \\$! > /home/ubuntu/codoc/logs/chat-dev-deploy.pid",
               "echo started"
             ]
           }
