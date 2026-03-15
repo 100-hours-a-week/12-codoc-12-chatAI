@@ -17,15 +17,128 @@ jobs:
     uses: ./.github/workflows/ci.yml
     secrets: inherit
 
-  deploy:
+  deploy_dev:
+    if: github.ref_name == 'dev'
     needs: [ci]
     runs-on: ubuntu-latest
     env:
-      AWS_REGION: ${{ github.ref_name == 'dev' && secrets.AWS_REGION_DEV || secrets.AWS_REGION }}
-      CODEDEPLOY_APP: ${{ github.ref_name == 'dev' && secrets.CODEDEPLOY_APP_DEV || secrets.CODEDEPLOY_APP }}
-      CODEDEPLOY_GROUP: ${{ github.ref_name == 'dev' && secrets.CODEDEPLOY_GROUP_DEV || secrets.CODEDEPLOY_GROUP }}
-      S3_BUCKET: ${{ github.ref_name == 'dev' && secrets.DEPLOY_BUCKET_DEV || secrets.DEPLOY_BUCKET }}
-      S3_KEY: ${{ github.ref_name == 'dev' && secrets.DEPLOY_KEY_DEV || secrets.DEPLOY_KEY }}
+      AWS_REGION: ${{ secrets.AWS_REGION_DEV }}
+      ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+      ECR_REPO: ${{ secrets.ECR_REPO }}
+      AI_INSTANCE_ID_DEV: ${{ secrets.AI_INSTANCE_ID_DEV }}
+      AI_ENV_DEV: ${{ secrets.AI_ENV_DEV }}
+      DEV_DEPLOY_SCRIPT_PATH: /home/ubuntu/codoc/scripts/deploy-chat-dev.sh
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Validate dev deploy inputs
+        run: |
+          if [ -z "${AI_INSTANCE_ID_DEV}" ]; then
+            echo "AI_INSTANCE_ID_DEV secret is empty"
+            exit 1
+          fi
+
+          if [ -z "${AI_ENV_DEV}" ]; then
+            echo "AI_ENV_DEV secret is empty"
+            exit 1
+          fi
+
+      - name: Deploy to dev instance via SSM
+        id: deploy_dev
+        run: |
+          APP_ENV_CONTENT_BASE64="$(printf '%s' "${AI_ENV_DEV}" | base64 -w0)"
+          PARAMS_FILE="$(mktemp)"
+
+          cat > "${PARAMS_FILE}" <<EOF
+          {
+            "commands": [
+              "export AWS_REGION='${AWS_REGION}'",
+              "export ECR_REGISTRY='${ECR_REGISTRY}'",
+              "export ECR_REPO='${ECR_REPO}'",
+              "export IMAGE_TAG='dev'",
+              "export CONTAINER_NAME='codoc-chat-ai'",
+              "export HOST_PORT='8000'",
+              "export APP_PORT='8000'",
+              "export HEALTH_PATH='/'",
+              "export APP_ENV_PATH='/home/ubuntu/app/.env'",
+              "export APP_ENV_CONTENT_BASE64='${APP_ENV_CONTENT_BASE64}'",
+              "bash '${DEV_DEPLOY_SCRIPT_PATH}'"
+            ]
+          }
+          EOF
+
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "${AI_INSTANCE_ID_DEV}" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy chatAI dev" \
+            --parameters "file://${PARAMS_FILE}" \
+            --query 'Command.CommandId' \
+            --output text)
+
+          echo "command_id=${COMMAND_ID}" >> "${GITHUB_OUTPUT}"
+          echo "Started SSM command: ${COMMAND_ID}"
+
+      - name: Wait for SSM command
+        run: |
+          COMMAND_ID="${{ steps.deploy_dev.outputs.command_id }}"
+          STATUS=""
+
+          for i in $(seq 1 120); do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "${COMMAND_ID}" \
+              --instance-id "${AI_INSTANCE_ID_DEV}" \
+              --query 'Status' \
+              --output text 2>/dev/null || true)
+
+            echo "SSM command status: ${STATUS:-Pending} (${i}/120)"
+
+            case "${STATUS}" in
+              Success)
+                break
+                ;;
+              Failed|Cancelled|TimedOut|Cancelling)
+                break
+                ;;
+            esac
+
+            sleep 5
+          done
+
+          if [ "${STATUS}" != "Success" ]; then
+            echo "Final SSM status: ${STATUS:-Unknown}"
+            aws ssm get-command-invocation \
+              --command-id "${COMMAND_ID}" \
+              --instance-id "${AI_INSTANCE_ID_DEV}" \
+              --query '{Status:Status,Stdout:StandardOutputContent,Stderr:StandardErrorContent}' \
+              --output json || true
+            exit 1
+          fi
+
+          aws ssm get-command-invocation \
+            --command-id "${COMMAND_ID}" \
+            --instance-id "${AI_INSTANCE_ID_DEV}" \
+            --query '{Status:Status,Stdout:StandardOutputContent}' \
+            --output json || true
+
+  deploy_main:
+    if: github.ref_name == 'main'
+    needs: [ci]
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      CODEDEPLOY_APP: ${{ secrets.CODEDEPLOY_APP }}
+      CODEDEPLOY_GROUP: ${{ secrets.CODEDEPLOY_GROUP }}
+      S3_BUCKET: ${{ secrets.DEPLOY_BUCKET }}
+      S3_KEY: ${{ secrets.DEPLOY_KEY }}
 
     steps:
       - name: Checkout
