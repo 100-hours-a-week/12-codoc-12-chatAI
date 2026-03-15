@@ -53,7 +53,7 @@ jobs:
           fi
 
       - name: Deploy to dev instance via SSM
-        id: deploy_dev
+        id: start_dev
         run: |
           APP_ENV_CONTENT_BASE64="$(printf '%s' "${AI_ENV_DEV}" | base64 -w0)"
           PARAMS_FILE="$(mktemp)"
@@ -61,6 +61,7 @@ jobs:
           cat > "${PARAMS_FILE}" <<EOF
           {
             "commands": [
+              "mkdir -p /home/ubuntu/codoc/logs",
               "export AWS_REGION='${AWS_REGION}'",
               "export ECR_REGISTRY='${ECR_REGISTRY}'",
               "export ECR_REPO='${ECR_REPO}'",
@@ -71,7 +72,9 @@ jobs:
               "export HEALTH_PATH='/'",
               "export APP_ENV_PATH='/home/ubuntu/app/.env'",
               "export APP_ENV_CONTENT_BASE64='${APP_ENV_CONTENT_BASE64}'",
-              "bash '${DEV_DEPLOY_SCRIPT_PATH}'"
+              "nohup bash '${DEV_DEPLOY_SCRIPT_PATH}' > /home/ubuntu/codoc/logs/chat-dev-deploy.log 2>&1 < /dev/null &",
+              "echo \\$! > /home/ubuntu/codoc/logs/chat-dev-deploy.pid",
+              "echo started"
             ]
           }
           EOF
@@ -79,7 +82,7 @@ jobs:
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${AI_INSTANCE_ID_DEV}" \
             --document-name "AWS-RunShellScript" \
-            --comment "Deploy chatAI dev" \
+            --comment "Start chatAI dev deploy" \
             --parameters "file://${PARAMS_FILE}" \
             --query 'Command.CommandId' \
             --output text)
@@ -87,12 +90,12 @@ jobs:
           echo "command_id=${COMMAND_ID}" >> "${GITHUB_OUTPUT}"
           echo "Started SSM command: ${COMMAND_ID}"
 
-      - name: Wait for SSM command
+      - name: Wait for deploy start command
         run: |
-          COMMAND_ID="${{ steps.deploy_dev.outputs.command_id }}"
+          COMMAND_ID="${{ steps.start_dev.outputs.command_id }}"
           STATUS=""
 
-          for i in $(seq 1 120); do
+          for i in $(seq 1 30); do
             STATUS=$(aws ssm get-command-invocation \
               --command-id "${COMMAND_ID}" \
               --instance-id "${AI_INSTANCE_ID_DEV}" \
@@ -114,7 +117,75 @@ jobs:
           done
 
           if [ "${STATUS}" != "Success" ]; then
-            echo "Final SSM status: ${STATUS:-Unknown}"
+            echo "Final start-command status: ${STATUS:-Unknown}"
+            aws ssm get-command-invocation \
+              --command-id "${COMMAND_ID}" \
+              --instance-id "${AI_INSTANCE_ID_DEV}" \
+              --query '{Status:Status,Stdout:StandardOutputContent,Stderr:StandardErrorContent}' \
+              --output json || true
+            exit 1
+          fi
+
+          aws ssm get-command-invocation \
+            --command-id "${COMMAND_ID}" \
+            --instance-id "${AI_INSTANCE_ID_DEV}" \
+            --query '{Status:Status,Stdout:StandardOutputContent}' \
+            --output json || true
+
+      - name: Start health check via SSM
+        id: health_check
+        run: |
+          PARAMS_FILE="$(mktemp)"
+
+          cat > "${PARAMS_FILE}" <<'EOF'
+          {
+            "commands": [
+              "for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8000/ >/dev/null && echo healthy && exit 0; sleep 5; done",
+              "docker logs --tail 200 codoc-chat-ai 2>&1 || true",
+              "exit 1"
+            ]
+          }
+          EOF
+
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "${AI_INSTANCE_ID_DEV}" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Health check chatAI dev" \
+            --parameters "file://${PARAMS_FILE}" \
+            --query 'Command.CommandId' \
+            --output text)
+
+          echo "command_id=${COMMAND_ID}" >> "${GITHUB_OUTPUT}"
+          echo "Started health-check command: ${COMMAND_ID}"
+
+      - name: Wait for health check
+        run: |
+          COMMAND_ID="${{ steps.health_check.outputs.command_id }}"
+          STATUS=""
+
+          for i in $(seq 1 120); do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "${COMMAND_ID}" \
+              --instance-id "${AI_INSTANCE_ID_DEV}" \
+              --query 'Status' \
+              --output text 2>/dev/null || true)
+
+            echo "Health-check status: ${STATUS:-Pending} (${i}/120)"
+
+            case "${STATUS}" in
+              Success)
+                break
+                ;;
+              Failed|Cancelled|TimedOut|Cancelling)
+                break
+                ;;
+            esac
+
+            sleep 5
+          done
+
+          if [ "${STATUS}" != "Success" ]; then
+            echo "Final health-check status: ${STATUS:-Unknown}"
             aws ssm get-command-invocation \
               --command-id "${COMMAND_ID}" \
               --instance-id "${AI_INSTANCE_ID_DEV}" \
