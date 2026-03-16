@@ -1,3 +1,5 @@
+import os
+
 from fastapi import Request, FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -5,12 +7,16 @@ from pydantic import ValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.common.exceptions.base_exception import BusinessException
 from app.common.api_response import CommonResponse
+from app.observability import record_exception_metric
+
+APP_NAME = os.getenv("APP_NAME", "app-chatai")
 
 def register_exception_handlers(app: FastAPI):
     
     # HTTP 에러 처리(ex. 404 NOT FOUND)
     @app.exception_handler(StarletteHTTPException)
     async def unicorn_exception_handler(request: Request, exc: StarletteHTTPException):
+        record_exception_metric(request, exc, APP_NAME)
         return JSONResponse(
             status_code=exc.status_code,
             content=CommonResponse.fail_response(
@@ -22,6 +28,7 @@ def register_exception_handlers(app: FastAPI):
     # 데이터 검증 에러 처리(Pydantic Validation Error)
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request: Request, exc: RequestValidationError):
+        record_exception_metric(request, exc, APP_NAME)
         return JSONResponse(
             status_code=422,
             content=CommonResponse.fail_response(
@@ -34,6 +41,7 @@ def register_exception_handlers(app: FastAPI):
     @app.exception_handler(ValidationError)
     async def validation_error_handler(request: Request, exc: ValidationError):
     # 애플리케이션 로직에서 모델 검증 실패
+        record_exception_metric(request, exc, APP_NAME)
         return JSONResponse(
             status_code=400,
             content=CommonResponse.fail_response(
@@ -46,6 +54,7 @@ def register_exception_handlers(app: FastAPI):
     # 그 외 서버 내부 에러(500)
     @app.exception_handler(Exception)
     async def global_exception_handler(request: Request, exc: Exception):
+        record_exception_metric(request, exc, APP_NAME)
         return JSONResponse(
             status_code=500,
             content=CommonResponse.fail_response(
@@ -57,6 +66,7 @@ def register_exception_handlers(app: FastAPI):
     # 커스텀 비즈니스 로직 에러 처리
     @app.exception_handler(BusinessException)
     async def business_exception_handler(request: Request, exc: BusinessException):
+        record_exception_metric(request, exc, APP_NAME)
         return JSONResponse(
             status_code=400,
             content=CommonResponse.fail_response(
