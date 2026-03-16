@@ -1,0 +1,36 @@
+{
+  "problem_id": 83,
+  "title": "행렬 제곱",
+  "difficulty": "4",
+  "problem_algorithm_tag": ["분할 정복", "구현", "수학"],
+  "answer_guides": [
+    {
+      "paragraph_type": "BACKGROUND",
+      "content": "크기가 N*N인 행렬 A가 주어진다. 이때, A의 B제곱을 구하는 프로그램을 작성하시오.",
+      "chatbot_answer_guide": "행렬을 여러 번 곱하는 상황이지만 실제로는 '큰 지수의 거듭제곱 연산' 문제임을 인지하도록 유도하세요. 단순 반복 곱셈이 가능한지 먼저 생각하게 하고, B의 크기를 확인하도록 질문을 던져 보세요.",
+      "essential_summary": "N×N 크기의 **행렬(Matrix)**이 주어졌고 이를 **B번 곱하는 거듭제곱 연산**을 수행해야 하는 문제이다. 즉 행렬 곱셈을 기반으로 한 **행렬 거듭제곱(Matrix Power)** 계산 문제로 볼 수 있다.",
+      "essential_keywords": ["행렬", "Matrix", "행렬 곱셈", "Matrix Multiplication"]
+    },
+    {
+      "paragraph_type": "GOAL",
+      "content": "수가 매우 커질 수 있으니, A^B의 각 원소를 1,000으로 나눈 나머지를 출력한다.",
+      "chatbot_answer_guide": "단순히 A를 B번 곱하는 것이 아니라 결과 행렬을 계산한 뒤 각 원소에 대해 1000으로 나눈 나머지를 출력해야 한다는 점을 강조하세요.",
+      "essential_summary": "입력으로 주어진 행렬 A와 정수 B에 대해 **A^B (행렬의 B제곱)**을 계산한 뒤, 결과 행렬의 **각 원소를 1000으로 나눈 나머지 값**을 출력해야 한다.",
+      "essential_keywords": ["행렬 거듭제곱", "A^B", "모듈러 연산", "Modulo 1000"]
+    },
+    {
+      "paragraph_type": "STRATEGY",
+      "content": "수가 매우 커질 수 있으니, A^B의 각 원소를 1,000으로 나눈 나머지를 출력한다.",
+      "chatbot_answer_guide": "지수 B가 매우 크기 때문에 단순 반복 곱셈으로 해결 가능한지 먼저 생각하게 하세요. 이후 거듭제곱을 빠르게 계산하는 방법이 무엇인지 유도하여 분할 정복 접근을 떠올리게 하세요.",
+      "essential_summary": "지수 B가 매우 크기 때문에 **분할 정복 기반의 빠른 거듭제곱(Fast Exponentiation)**을 사용하여 A^B를 계산해야 한다. 즉, B가 짝수일 때는 A^(B/2) × A^(B/2), 홀수일 때는 A × A^(B-1) 형태로 줄여가며 계산한다.",
+      "essential_keywords": ["분할 정복", "Divide and Conquer", "빠른 거듭제곱", "Fast Power"]
+    },
+    {
+      "paragraph_type": "INSIGHT",
+      "content": "행렬의 크기 N: 2 ≤ N ≤ 5, 지수 B: 1 ≤ B ≤ 100,000,000,000",
+      "chatbot_answer_guide": "B의 크기가 매우 크다는 점을 강조하여 단순 반복 O(B) 방식이 불가능함을 깨닫게 하세요. 분할 정복을 사용하면 계산 횟수가 어떻게 줄어드는지도 생각하도록 유도하세요.",
+      "essential_summary": "지수 B가 최대 10^11이므로 단순 반복 곱셈은 불가능하다. 분할 정복을 사용하면 **O(log B)**번의 행렬 곱셈만 수행하면 된다. 행렬 곱셈은 O(N³)이므로 전체 시간 복잡도는 **O(N³ log B)** 수준이다.",
+      "essential_keywords": ["O(log B)", "시간 복잡도", "행렬 곱셈", "N^3"]
+    }
+  ]
+}

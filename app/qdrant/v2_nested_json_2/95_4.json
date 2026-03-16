@@ -1,0 +1,36 @@
+{
+  "problem_id": 95,
+  "title": "암호문",
+  "difficulty": "5",
+  "problem_algorithm_tag": ["중간에서 만나기", "해 구성하기", "브루트포스 알고리즘"],
+  "answer_guides": [
+    {
+      "paragraph_type": "BACKGROUND",
+      "content": "어린 왕자는 전문적인 해커이다. 어린 왕자는 최근에 n-bit로 이루어진 이진 암호문을 알아내기 위해 혈안이 되어 있다. 이 암호문을 알아내기 위한 단서를 한 가지 얻었는데, n개의 숫자들과 이 암호문을 이용해서 암호화된 숫자를 알아낸 것이다.\n\n암호화된 숫자 K = a1t1 + a2t2 + ... + antn 으로 표현된다. 여기서 t1 ~ tn은 0 또는 1로 우리가 알아내려고 하는 n-bit의 이진 암호문을 순서대로 이루는 숫자들이다.",
+      "chatbot_answer_guide": "문제의 스토리는 해킹과 암호 해독이지만, 실제로는 '0/1 선택을 통해 특정 가중합을 만드는 문제'라는 점을 학생이 스스로 파악하도록 유도하세요.",
+      "essential_summary": "각 숫자 ai에 대해 **선택(1) 또는 비선택(0)** 을 하여 가중합 K를 만드는 **부분집합 선택 문제(Subset Sum)** 로 모델링할 수 있다.",
+      "essential_keywords": ["부분집합 합", "Subset Sum", "이진 선택"]
+    },
+    {
+      "paragraph_type": "GOAL",
+      "content": "어린 왕자는 a1 ~ an과 K를 알고 있다. 이진 암호문을 알아내는 프로그램을 작성하시오.",
+      "chatbot_answer_guide": "문제는 단순히 합을 계산하는 것이 아니라, ai와 ti의 곱의 합이 정확히 K가 되는 ti들의 조합을 찾는 것임을 강조하세요.",
+      "essential_summary": "각 ti ∈ {0,1} 를 선택하여 **a1t1 + a2t2 + ... + antn = K** 를 만족하는 n-bit 이진 문자열을 찾아 출력해야 한다.",
+      "essential_keywords": ["가중합", "Binary Vector", "정답 구성"]
+    },
+    {
+      "paragraph_type": "STRATEGY",
+      "content": "K = a1t1 + a2t2 + ... + antn 으로 표현된다. 여기서 t1 ~ tn은 0 또는 1이다.",
+      "chatbot_answer_guide": "n이 최대 40이므로 2^40 완전 탐색은 불가능하다는 점을 생각하도록 유도하고, 배열을 절반으로 나누는 아이디어를 떠올리게 하세요.",
+      "essential_summary": "n ≤ 40이므로 전체 부분집합을 탐색하는 대신 **배열을 절반으로 나누어 부분합을 계산하고 결합하는 Meet-in-the-middle 전략**을 사용한다.",
+      "essential_keywords": ["중간에서 만나기", "부분합"]
+    },
+    {
+      "paragraph_type": "INSIGHT",
+      "content": "시간 제한: 2초\n메모리 제한: 128MB\n\n5 ≤ n ≤ 40\nai는 자연수\nn개의 수 전체의 합은 2,000,000,000을 넘지 않는다.",
+      "chatbot_answer_guide": "2^40은 약 1조이므로 완전 탐색이 불가능하다는 사실을 먼저 생각하게 하고, 이를 줄이기 위해 문제를 절반으로 나누는 접근을 떠올리게 하세요.",
+      "essential_summary": "n ≤ 40 이므로 **2^n 완전 탐색은 불가능하지만 2^(n/2) 수준으로 줄이는 Meet-in-the-middle 알고리즘**으로 해결 가능하다.",
+      "essential_keywords": ["2^n", "시간 복잡도", "2^(n/2)"]
+    }
+  ]
+}

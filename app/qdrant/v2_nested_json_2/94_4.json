@@ -1,0 +1,36 @@
+{
+  "problem_id": 94,
+  "title": "좋은 수",
+  "difficulty": "4",
+  "problem_algorithm_tag": ["중간에서 만나기", "다이나믹 프로그래밍", "해시를 사용한 집합과 맵"],
+  "answer_guides": [
+    {
+      "paragraph_type": "BACKGROUND",
+      "content": "정수 N개로 이루어진 수열 A가 있다. 이때, i번째 수가 그 앞에 있는 수 세 개의 합으로 나타낼 수 있을 때, 그 수를 좋다고 한다. (같은 위치에 있는 수를 여러 번 더해도 된다)",
+      "chatbot_answer_guide": "문제의 핵심이 단순한 수열 계산이 아니라 '이전 값들의 합을 이용해 현재 값을 표현할 수 있는지'를 판단하는 문제라는 점을 학생이 스스로 인식하도록 유도하세요.",
+      "essential_summary": "이 문제는 정수 수열에서 **현재 원소가 이전 원소 세 개의 합으로 표현 가능한지 확인하는 수열 분석 문제**이다.",
+      "essential_keywords": ["수열", "세 수의 합", "Three Sum"]
+    },
+    {
+      "paragraph_type": "GOAL",
+      "content": "수열이 주어졌을 때, 총 몇 개의 수가 좋은 수 일까?",
+      "chatbot_answer_guide": "특정 수가 조건을 만족하는지만 보는 것이 아니라, 수열 전체에서 조건을 만족하는 원소의 개수를 세는 문제라는 점을 강조하세요.",
+      "essential_summary": "수열 A에서 **앞에 등장한 수 세 개의 합으로 표현 가능한 원소의 개수**를 계산하는 것이 목표이다.",
+      "essential_keywords": ["개수 계산", "조건 만족 원소", "Counting"]
+    },
+    {
+      "paragraph_type": "STRATEGY",
+      "content": "i번째 수가 그 앞에 있는 수 세 개의 합으로 나타낼 수 있을 때 그 수를 좋은 수라고 한다.",
+      "chatbot_answer_guide": "세 수의 합을 매번 직접 계산하면 비효율적이므로, 이전 두 수의 합을 저장해 활용하는 방식이 가능하다는 힌트를 주세요.",
+      "essential_summary": "이전 두 수의 합을 **해시 기반 자료구조에 저장**해 두고, 현재 수에서 이전 수 하나를 뺀 값이 존재하는지 확인하여 세 수의 합 조건을 검사한다.",
+      "essential_keywords": ["해시", "Hash Set", "두 수의 합"]
+    },
+    {
+      "paragraph_type": "INSIGHT",
+      "content": "시간 제한: 1초\n메모리 제한: 128MB\n\n1 ≤ N ≤ 5000\n-100,000 ≤ Ai ≤ 100,000",
+      "chatbot_answer_guide": "N이 5000이므로 O(N³) 같은 알고리즘은 불가능하고, 최소 O(N²) 정도의 접근이 필요하다는 점을 스스로 판단하게 유도하세요.",
+      "essential_summary": "N ≤ 5000 이므로 **세 수의 합을 직접 탐색하는 O(N³) 알고리즘은 불가능하며, 해시를 활용한 O(N²) 수준의 알고리즘이 적절하다.**",
+      "essential_keywords": ["O(N²)", "시간 복잡도", "입력 크기 제한"]
+    }
+  ]
+}

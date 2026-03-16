@@ -1,0 +1,36 @@
+{
+  "problem_id": 88,
+  "title": "로또",
+  "difficulty": "3",
+  "problem_algorithm_tag": ["브루트포스 알고리즘", "재귀"],
+  "answer_guides": [
+    {
+      "paragraph_type": "BACKGROUND",
+      "content": "독일 로또는 {1, 2, ..., 49}에서 수 6개를 고른다.\n\n로또 번호를 선택하는데 사용되는 가장 유명한 전략은 49가지 수 중 k(k>6)개의 수를 골라 집합 S를 만든 다음 그 수만 가지고 번호를 선택하는 것이다.\n\n예를 들어, k=8, S={1,2,3,5,8,13,21,34}인 경우 이 집합 S에서 수를 고를 수 있는 경우의 수는 총 28가지이다.",
+      "chatbot_answer_guide": "이 문제의 스토리는 로또이지만 실제로는 특정 집합에서 일정 개수를 선택하는 조합 생성 문제임을 학생이 인식하도록 유도하세요.",
+      "essential_summary": "로또 번호를 선택하는 상황이지만 실제로는 **집합 S에서 6개의 숫자를 선택하는 조합(Combination) 생성 문제**로 모델링할 수 있다.",
+      "essential_keywords": ["조합", "Combination", "집합"]
+    },
+    {
+      "paragraph_type": "GOAL",
+      "content": "집합 S와 k가 주어졌을 때, 수를 고르는 모든 방법을 구하는 프로그램을 작성하시오.",
+      "chatbot_answer_guide": "단 하나의 결과가 아니라 '모든 가능한 경우'를 출력해야 한다는 점을 강조하여 완전 탐색 접근을 떠올리도록 유도하세요.",
+      "essential_summary": "주어진 집합 S에서 **6개의 숫자를 선택하는 모든 조합을 생성하여 출력**해야 한다.",
+      "essential_keywords": ["모든 경우", "조합 생성", "출력"]
+    },
+    {
+      "paragraph_type": "STRATEGY",
+      "content": "각 테스트 케이스마다 집합 S에서 6개의 수를 고르는 모든 조합을 출력한다. 각 조합은 사전 순으로 출력한다.",
+      "chatbot_answer_guide": "조합을 생성하는 가장 일반적인 방법이 재귀 기반 백트래킹이라는 점을 떠올리도록 유도하세요.",
+      "essential_summary": "집합의 원소를 하나씩 선택하며 **재귀(백트래킹)를 이용해 조합을 생성하고 사전 순으로 출력**한다.",
+      "essential_keywords": ["재귀", "백트래킹", "브루트포스"]
+    },
+    {
+      "paragraph_type": "INSIGHT",
+      "content": "각 테스트 케이스에서 k는 6 < k < 13 범위를 가진다.",
+      "chatbot_answer_guide": "입력 크기를 분석하여 완전 탐색이 가능한지 판단하도록 유도하세요.",
+      "essential_summary": "k < 13 이므로 최대 조합 수는 C(12,6)=924 정도로 제한된다. 따라서 **브루트포스 조합 생성(O(C(k,6)))으로 충분히 해결 가능**하다.",
+      "essential_keywords": ["k ≤ 12", "시간 복잡도", "완전 탐색"]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 from app.domain.chatbot.bot_state import ChatBotState
 from app.domain.chatbot.prompts import PROMPTS
-from app.common.config import chatbot
+from app.common.config import chatbot, llm
 import asyncio
 
 async def tutor_node(state: ChatBotState) -> dict:
@@ -33,7 +33,7 @@ async def tutor_node(state: ChatBotState) -> dict:
     }
     
     # 2. 체인 구성 (프롬프트 | 모델)
-    chain = prompt_template | chatbot
+    chain = prompt_template | llm
 
     # 3. 답변 생성 (429 에러 대응 재시도 로직 추가)
     try:

@@ -37,3 +37,12 @@ python-json-logger
 
 # [Redis]
 redis>=7.2.0
+
+# [MCP]
+mcp>=1.0.0
+langchain-mcp-adapters>=0.1.0
+
+SQLAlchemy>=2.0.0
+asyncpg
+alembic
+greenlet

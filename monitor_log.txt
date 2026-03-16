@@ -1,0 +1,14 @@
+Warning: Using a password with '-a' or '-u' option on the command line interface may not be safe.
+OK
+1772179618.130685 [0 211.244.225.166:62444] "info"
+1772179623.155192 [0 211.244.225.166:62444] "info"
+1772179623.334093 [0 211.244.225.166:62548] "AUTH" "(redacted)"
+1772179623.349963 [0 211.244.225.166:62548] "CLIENT" "SETINFO" "LIB-NAME" "redis-py"
+1772179623.358281 [0 211.244.225.166:62548] "CLIENT" "SETINFO" "LIB-VER" "7.2.0"
+1772179623.370311 [0 211.244.225.166:62548] "INFO" "cluster"
+1772179623.387930 [0 211.244.225.166:62548] "LRANGE" "message_store:ai:chatbot:user:1:problem:1:test-session-002" "0" "-1"
+1772179628.127775 [0 211.244.225.166:62444] "info"
+1772179629.166189 [0 211.244.225.166:62548] "RPUSH" "message_store:ai:chatbot:user:1:problem:1:test-session-002" "{\"type\": \"human\", \"data\": {\"content\": \"\\ub808\\ubca8\\uc758 \\ucd5c\\ub300\\uac12\\uc778 \\uac83 \\uac19\\uc544. \\ub515\\uc154\\ub108\\ub9ac\\uc758 \\ud0a4\\ub85c \\uc0ac\\uc6a9\\ud574\\ubcfc\\uac8c.\", \"additional_kwargs\": {}, \"type\": \"human\", \"example\": false}}"
+1772179629.178131 [0 211.244.225.166:62548] "RPUSH" "message_store:ai:chatbot:user:1:problem:1:test-session-002" "{\"type\": \"ai\", \"data\": {\"content\": \"\\uc815\\ud655\\ud574\\uc694! '\\ub808\\ubca8'\\uc774\\ub77c\\ub294 \\uc815\\ubcf4\\uac00 \\ubb38\\uc81c \\ud574\\uacb0\\uc5d0 \\uc911\\uc694\\ud55c \\uc5ed\\ud560\\uc744 \\ud560 \\uac83\\uc774\\ub77c\\ub294 \\uac83\\uc744 \\uc798 \\ud30c\\uc545\\ud558\\uc168\\ub124\\uc694. \\uc774\\uc81c \\ub2e4\\uc74c \\ub2e8\\uacc4\\uc778 **[\\ubaa9\\ud45c \\uc124\\uc815(GOAL)]**\\uc73c\\ub85c \\ub118\\uc5b4\\uac00 \\ubcfc\\uae4c\\uc694? \\uc8fc\\uc5b4\\uc9c4 \\ub808\\ubca8 \\uc815\\ubcf4\\ub97c \\ud65c\\uc6a9\\ud574\\uc11c \\ucd5c\\uc885\\uc801\\uc73c\\ub85c \\uc5b4\\ub5a4 \\uac12\\uc744 \\uad6c\\ud574\\uc57c \\ud560\\uae4c\\uc694?\\n\", \"additional_kwargs\": {}, \"type\": \"ai\", \"example\": false}}"
+1772179629.186815 [0 211.244.225.166:62548] "EXPIRE" "message_store:ai:chatbot:user:1:problem:1:test-session-002" "86400"
+Error: Server closed the connection
