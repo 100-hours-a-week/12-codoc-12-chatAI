@@ -8,10 +8,19 @@ httpx
 # [LangChain Framework]
 langchain>=0.3.0
 langchain-community>=0.3.0
-langchain-google-genai>=2.0.0
-google-genai>=0.3.0
+langchain-huggingface==1.2.0
 langchain-openai
 langchain-qdrant
+langfuse==2.50.0
+
+# [Gemini]
+langchain-google-genai>=2.0.0
+google-genai>=0.3.0
+
+# [HuggingFace & ML]
+huggingface-hub>=0.33.4, <1.0.0
+transformers<5.0.0
+sentence-transformers
 
 # [DB Client]
 qdrant-client
@@ -20,6 +29,11 @@ qdrant-client
 pillow
 tiktoken
 pytest
+prometheus-fastapi-instrumentator
+opentelemetry-api
 
 sentence-transformers
 python-json-logger
+
+# [Redis]
+redis>=7.2.0

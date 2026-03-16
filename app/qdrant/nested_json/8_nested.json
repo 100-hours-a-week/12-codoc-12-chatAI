@@ -2,7 +2,7 @@
   "problem_id": 8,
   "title": "짝수번째 피보나치 수의 합",
   "difficulty": "5",
-  "tags": ["수학", "분할 정복을 이용한 거듭제곱"],
+  "problem_algorithm_tag": ["수학", "분할 정복을 이용한 거듭제곱"],
   "answer_guides": [
     {
       "paragraph_type": "BACKGROUND",
