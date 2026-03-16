@@ -2,6 +2,12 @@ import time
 from typing import Tuple
 
 from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.logging import LoggingInstrumentor
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 from prometheus_client.openmetrics.exposition import CONTENT_TYPE_LATEST, generate_latest
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
@@ -103,3 +109,17 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
 
 def metrics(_: Request) -> Response:
     return Response(generate_latest(REGISTRY), headers={"Content-Type": CONTENT_TYPE_LATEST})
+
+
+def setting_otlp(app: ASGIApp, app_name: str, endpoint: str, log_correlation: bool = False) -> None:
+    resource = Resource.create(attributes={"service.name": app_name})
+
+    tracer = TracerProvider(resource=resource)
+    trace.set_tracer_provider(tracer)
+    tracer.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint, insecure=True)))
+
+    # Keep our JSON logger intact; we only want OTEL context attached to records.
+    if log_correlation:
+        LoggingInstrumentor().instrument(set_logging_format=False)
+
+    FastAPIInstrumentor.instrument_app(app, tracer_provider=tracer)
