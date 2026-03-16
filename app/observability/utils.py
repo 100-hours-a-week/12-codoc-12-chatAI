@@ -100,11 +100,28 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
 
     @staticmethod
     def get_path(request: Request) -> Tuple[str, bool]:
-        for route in request.app.routes:
-            match, _ = route.matches(request.scope)
-            if match == Match.FULL:
-                return route.path, True
-        return request.url.path, False
+        return resolve_request_path(request)
+
+
+def resolve_request_path(request: Request) -> Tuple[str, bool]:
+    for route in request.app.routes:
+        match, _ = route.matches(request.scope)
+        if match == Match.FULL:
+            return route.path, True
+    return request.url.path, False
+
+
+def record_exception_metric(request: Request, exc: BaseException, app_name: str) -> None:
+    path, is_handled_path = resolve_request_path(request)
+    if not is_handled_path:
+        return
+
+    EXCEPTIONS.labels(
+        method=request.method,
+        path=path,
+        exception_type=type(exc).__name__,
+        app_name=app_name,
+    ).inc()
 
 
 def metrics(_: Request) -> Response:
