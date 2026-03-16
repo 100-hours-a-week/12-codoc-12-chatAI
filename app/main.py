@@ -1,8 +1,8 @@
 import asyncio
+import os
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from contextlib import asynccontextmanager
-from prometheus_fastapi_instrumentator import Instrumentator
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams
 from langchain_core.prompts import ChatPromptTemplate
@@ -11,13 +11,15 @@ from app.common.config import llm, settings
 from app.domain.chatbot.bot_router import router as bot_router
 from app.logging_config import setup_logging
 from app.middleware.request_logging import request_logging_middleware
-import os
+from app.observability import PrometheusMiddleware, metrics
 
 VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", "384"))
+APP_NAME = os.getenv("APP_NAME", "app_chatai")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    setup_logging()
     print(f"서버 시작! Qdrant({settings.QDRANT_HOST}) 연결 체크 중...")  
       
     client = QdrantClient(
@@ -50,7 +52,8 @@ app = FastAPI(
 )
 
 # Prometheus metrics
-Instrumentator().instrument(app).expose(app, endpoint="/metrics")
+app.add_middleware(PrometheusMiddleware, app_name=APP_NAME)
+app.add_route("/metrics", metrics)
 
 # 요청 완료 시 JSON + 텍스트 로그 기록
 app.middleware("http")(request_logging_middleware)

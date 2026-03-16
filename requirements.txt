@@ -29,8 +29,8 @@ qdrant-client
 pillow
 tiktoken
 pytest
-prometheus-fastapi-instrumentator
 opentelemetry-api
+prometheus-client
 
 sentence-transformers
 python-json-logger
