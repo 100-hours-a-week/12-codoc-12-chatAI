@@ -1,4 +1,5 @@
 import asyncio
+import os
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from contextlib import asynccontextmanager
@@ -10,13 +11,16 @@ from app.common.config import llm, settings
 from app.domain.chatbot.bot_router import router as bot_router
 from app.logging_config import setup_logging
 from app.middleware.request_logging import request_logging_middleware
-import os
+from app.observability import PrometheusMiddleware, metrics, setting_otlp
 
 VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", "384"))
+APP_NAME = os.getenv("APP_NAME", "app-chatai")
+OTLP_GRPC_ENDPOINT = os.getenv("OTLP_GRPC_ENDPOINT", "").strip()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    setup_logging()
     print(f"서버 시작! Qdrant({settings.QDRANT_HOST}) 연결 체크 중...")  
       
     client = QdrantClient(
@@ -48,6 +52,12 @@ app = FastAPI(
     openapi_url="/openapi.json" if docs_enabled else None
 )
 
+# Prometheus metrics
+app.add_middleware(PrometheusMiddleware, app_name=APP_NAME)
+app.add_route("/metrics", metrics)
+if OTLP_GRPC_ENDPOINT:
+    setting_otlp(app, APP_NAME, OTLP_GRPC_ENDPOINT, log_correlation=True)
+
 # 요청 완료 시 JSON + 텍스트 로그 기록
 app.middleware("http")(request_logging_middleware)
 
@@ -61,7 +71,7 @@ def read_root():
 def health_check():
     return {"status": "ok"}
 
-app.include_router(bot_router, prefix="/api/v1")
+app.include_router(bot_router, prefix="/api/v2")
 
 if __name__ == "__main__":
     import uvicorn

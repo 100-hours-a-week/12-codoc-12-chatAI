@@ -2,7 +2,7 @@
   "problem_id": 4,
   "title": "소가 길을 건너간 이유 3",
   "difficulty": "3",
-  "tags": ["정렬", "그리디", "시뮬레이션"],
+  "problem_algorithm_tag": ["정렬", "그리디 알고리즘", "시뮬레이션"],
   "answer_guides": [
     {
       "paragraph_type": "BACKGROUND",

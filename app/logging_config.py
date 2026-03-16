@@ -5,9 +5,17 @@ from datetime import datetime, timezone
 from logging.handlers import TimedRotatingFileHandler
 
 
-LOG_DIR = "/home/ubuntu/ai"
+LOG_DIR = "/home/ubuntu/ai/logs"
 TEXT_LOG_PATH = os.path.join(LOG_DIR, "app.log")
 JSON_LOG_PATH = os.path.join(LOG_DIR, "app.json.log")
+
+
+class OpenTelemetryContextFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.otelTraceID = getattr(record, "otelTraceID", "0")
+        record.otelSpanID = getattr(record, "otelSpanID", "0")
+        record.otelServiceName = getattr(record, "otelServiceName", os.getenv("APP_NAME", "app-chatai"))
+        return True
 
 
 class JsonFormatter(logging.Formatter):
@@ -58,9 +66,11 @@ def setup_logging() -> None:
             delay=True,
         )
         text_formatter = logging.Formatter(
-            "%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+            "%(asctime)s %(levelname)s [%(name)s] [%(filename)s:%(lineno)d] "
+            "[trace_id=%(otelTraceID)s span_id=%(otelSpanID)s resource.service.name=%(otelServiceName)s] - %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
         )
+        text_handler.addFilter(OpenTelemetryContextFilter())
         text_handler.setFormatter(text_formatter)
         logger.addHandler(text_handler)
 

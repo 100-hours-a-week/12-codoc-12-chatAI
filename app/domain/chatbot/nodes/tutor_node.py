@@ -1,6 +1,6 @@
 from app.domain.chatbot.bot_state import ChatBotState
 from app.domain.chatbot.prompts import PROMPTS
-from app.common.config import llm
+from app.common.config import chatbot
 import asyncio
 
 async def tutor_node(state: ChatBotState) -> dict:
@@ -27,13 +27,13 @@ async def tutor_node(state: ChatBotState) -> dict:
         "chatbot_answer_guide": state.get("chatbot_answer_guide"),
         "essential_keywords": ", ".join(state.get("essential_keywords", [])),
         "user_message": state["messages"][-1].content,
-        "analysis_reason": state.get("analyzer_reason", ""),
-        "is_correct": state.get("is_correct", False),
-        "user_level": state.get("user_level", "newbie")
+        "analysis_reason": analyzer_reason,
+        "is_correct": is_correct,
+        "user_level": user_level
     }
     
     # 2. 체인 구성 (프롬프트 | 모델)
-    chain = prompt_template | llm
+    chain = prompt_template | chatbot
 
     # 3. 답변 생성 (429 에러 대응 재시도 로직 추가)
     try:
