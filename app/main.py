@@ -1,4 +1,5 @@
 import asyncio
+import os
 from fastapi import FastAPI
 from fastapi import Depends
 from fastapi.responses import StreamingResponse
@@ -16,9 +17,11 @@ from app.common.db import get_db
 from app.domain.chatbot.bot_router import router as bot_router
 from app.logging_config import setup_logging
 from app.middleware.request_logging import request_logging_middleware
-import os
+from app.observability import PrometheusMiddleware, metrics, setting_otlp
 
 VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", "384"))
+APP_NAME = os.getenv("APP_NAME", "app-chatai")
+OTLP_GRPC_ENDPOINT = os.getenv("OTLP_GRPC_ENDPOINT", "").strip()
 
 
 _mcp_process: asyncio.subprocess.Process | None = None
@@ -27,8 +30,10 @@ _mcp_process: asyncio.subprocess.Process | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _mcp_process
-
-    print(f"서버 시작! Qdrant({settings.QDRANT_HOST}) 연결 체크 중...")
+    
+    setup_logging()
+    print(f"서버 시작! Qdrant({settings.QDRANT_HOST}) 연결 체크 중...")  
+      
     client = QdrantClient(
         host=settings.QDRANT_HOST,
         port=settings.QDRANT_PORT,
@@ -76,6 +81,12 @@ app = FastAPI(
     redoc_url="/redoc" if docs_enabled else None,
     openapi_url="/openapi.json" if docs_enabled else None
 )
+
+# Prometheus metrics
+app.add_middleware(PrometheusMiddleware, app_name=APP_NAME)
+app.add_route("/metrics", metrics)
+if OTLP_GRPC_ENDPOINT:
+    setting_otlp(app, APP_NAME, OTLP_GRPC_ENDPOINT, log_correlation=True)
 
 # 요청 완료 시 JSON + 텍스트 로그 기록
 app.middleware("http")(request_logging_middleware)

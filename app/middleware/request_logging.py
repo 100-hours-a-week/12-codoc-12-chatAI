@@ -30,29 +30,34 @@ def _truncate_payload(payload: object, max_bytes: int) -> tuple[object, bool]:
     return {"_truncated": True, "preview": trimmed, "size": len(raw)}, True
 
 
-def _get_otel_trace_id() -> str | None:
+def _get_otel_context() -> tuple[str | None, str | None]:
     try:
         from opentelemetry import trace  # type: ignore
     except Exception:  # noqa: BLE001
-        return None
+        return None, None
     span = trace.get_current_span()
     if not span:
-        return None
+        return None, None
     ctx = span.get_span_context()
     if not ctx or not ctx.trace_id:
-        return None
-    return f"{ctx.trace_id:032x}"
+        return None, None
+    trace_id = f"{ctx.trace_id:032x}"
+    span_id = f"{ctx.span_id:016x}" if getattr(ctx, "span_id", 0) else None
+    return trace_id, span_id
 
 
 async def request_logging_middleware(request: Request, call_next: Callable) -> Response:
     start = time.perf_counter()
 
-    trace_id = _get_otel_trace_id()
+    trace_id, span_id = _get_otel_context()
     if not trace_id:
         trace_id = request.headers.get("X-Request-Id") or f"req-{uuid.uuid4().hex[:12]}"
+    if not span_id:
+        span_id = "0"
     user_id = request.headers.get("X-User-Id")
 
     service = os.getenv("SERVICE_NAME", "ai-api")
+    otel_service_name = os.getenv("APP_NAME", service)
     app_env = os.getenv("APP_ENV")
     release = os.getenv("APP_RELEASE")
 
@@ -83,7 +88,15 @@ async def request_logging_middleware(request: Request, call_next: Callable) -> R
         error_type = exc.__class__.__name__
         stacktrace = traceback.format_exc()
         message = "Unhandled exception"
-        logger.exception("Unhandled exception", extra={"trace_id": trace_id})
+        logger.exception(
+            "Unhandled exception",
+            extra={
+                "trace_id": trace_id,
+                "otelTraceID": trace_id,
+                "otelSpanID": span_id,
+                "otelServiceName": otel_service_name,
+            },
+        )
         response = JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
     finally:
         latency_ms = int((time.perf_counter() - start) * 1000)
@@ -118,7 +131,12 @@ async def request_logging_middleware(request: Request, call_next: Callable) -> R
         logger.log(
             logging.ERROR if error_type else logging.INFO,
             message,
-            extra={"json_data": payload},
+            extra={
+                "json_data": payload,
+                "otelTraceID": trace_id,
+                "otelSpanID": span_id,
+                "otelServiceName": otel_service_name,
+            },
         )
 
     return response

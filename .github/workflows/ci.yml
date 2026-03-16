@@ -59,19 +59,25 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Set up Docker Buildx
+        if: (github.event_name == 'workflow_dispatch') || ((github.event_name == 'push') && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
+        uses: docker/setup-buildx-action@v3
+
       - name: Login to ECR
         if: (github.event_name == 'workflow_dispatch') || ((github.event_name == 'push') && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
-        run: |
-          aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build & Push Image
         if: (github.event_name == 'workflow_dispatch') || ((github.event_name == 'push') && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'))
-        run: |
-          IMAGE="$ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG"
-          IMAGE_ENV="$ECR_REGISTRY/$ECR_REPO:$ENV_TAG"
-          docker build -t "$IMAGE" -t "$IMAGE_ENV" .
-          docker push "$IMAGE"
-          docker push "$IMAGE_ENV"
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPO }}:${{ env.IMAGE_TAG }}
+            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPO }}:${{ env.ENV_TAG }}
+          cache-from: type=gha,scope=chat-ai-${{ github.ref_name }}
+          cache-to: type=gha,mode=max,scope=chat-ai-${{ github.ref_name }}
 
       - name: Notify Discord
         if: always()
