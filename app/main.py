@@ -14,7 +14,7 @@ from app.middleware.request_logging import request_logging_middleware
 from app.observability import PrometheusMiddleware, metrics, setting_otlp
 
 VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", "384"))
-APP_NAME = os.getenv("APP_NAME", "app_chatai")
+APP_NAME = os.getenv("APP_NAME", "app-chatai")
 OTLP_GRPC_ENDPOINT = os.getenv("OTLP_GRPC_ENDPOINT", "").strip()
 
 
@@ -56,7 +56,7 @@ app = FastAPI(
 app.add_middleware(PrometheusMiddleware, app_name=APP_NAME)
 app.add_route("/metrics", metrics)
 if OTLP_GRPC_ENDPOINT:
-    setting_otlp(app, APP_NAME, OTLP_GRPC_ENDPOINT)
+    setting_otlp(app, APP_NAME, OTLP_GRPC_ENDPOINT, log_correlation=True)
 
 # 요청 완료 시 JSON + 텍스트 로그 기록
 app.middleware("http")(request_logging_middleware)
