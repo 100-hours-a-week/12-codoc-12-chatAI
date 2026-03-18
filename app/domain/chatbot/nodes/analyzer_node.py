@@ -1,7 +1,7 @@
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from app.domain.chatbot.bot_state import ChatBotState
-from app.common.config import chatbot
+from app.common.config import chatbot, llm
 import asyncio
 
 # semantic 판단을 위한 전용 프롬프트 설계

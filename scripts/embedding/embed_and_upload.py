@@ -20,8 +20,8 @@ import uuid
 load_dotenv()
 
 # ==================== 설정 ====================
-QDRANT_HOST = os.getenv("QDRANT_HOST", "dev.codoc.cloud")
-QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
+QDRANT_HOST = os.getenv("QDRANT_HOST", "")
+QDRANT_PORT = int(os.getenv("QDRANT_PORT", ""))
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "")
 COLLECTION_NAME = os.getenv("COLLECTION_NAME", "Problems")
 VECTOR_SIZE = int(os.getenv("VECTOR_SIZE", "1024"))
@@ -208,7 +208,7 @@ if __name__ == "__main__":
     # 파일 하나가 아니라 '폴더'를 타겟으로 잡습니다.
     target_dir = os.path.join(
         project_root, 
-        "app", "qdrant", "nested_json"
+        "app", "qdrant", "v2_nested_json_2"
     )
         
     # 폴더 존재 확인

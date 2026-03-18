@@ -195,12 +195,13 @@ class ChatBotService:
 
              
         initial_state : ChatBotState = {
-            # "messages": [HumanMessage(content=request.user_message)],
-            "messages": past_messages + [HumanMessage(content=request.user_message)],            
+            "messages": past_messages + [HumanMessage(content=request.user_message)],
             "user_id": request.user_id,
             "user_level": request.user_level,
             "problem_id": request.problem_id,
             "run_id": run_id,
+            "session_id": session_id,
+            "message_type": request.message_type,
             "paragraph_type": request.paragraph_type if request.paragraph_type else "BACKGROUND",
             "is_correct": False
         }
@@ -238,21 +239,34 @@ class ChatBotService:
                 # 1. 노드 시작 알림
                 if kind == "on_chain_start" and event["name"] == "tutor_question":
                     yield f'event: status\ndata: {json.dumps({"paragraph_type": initial_state["paragraph_type"], "status": "PROCESSING"}, ensure_ascii=False)}\n\n'
-                    
-                # 2. 토큰 스트리밍 (Tutor는 유저에게, Analyzer는 로그로)
+                elif kind == "on_chain_start" and event["name"] == "finalizer":
+                    yield f'event: status\ndata: {json.dumps({"paragraph_type": "COMPLETED", "status": "PROCESSING"}, ensure_ascii=False)}\n\n'
+
+                # 2. 토큰 스트리밍 (Tutor/Finalizer는 유저에게, Analyzer는 로그로)
                 elif kind == "on_chat_model_stream":
                     content = event["data"].get("chunk", None)
                     if content and hasattr(content, 'content'):
                         token = content.content
-                        # 튜터 노드의 응답만 클라이언트로 스트리밍
-                        if node_name == "tutor_question":
+                        # 튜터/파이널라이저 노드의 응답은 클라이언트로 스트리밍
+                        if node_name in ("tutor_question", "finalizer"):
                             accumulated_text += token
                             yield f'event: token\ndata: {json.dumps({"text": token}, ensure_ascii=False)}\n\n'
                         # 분석 노드의 로그는 서버 콘솔에만 기록
                         elif node_name == "analyze_answer":
                             print(f"\033[94m[Analyzer Log]\033[0m {token}", end="", flush=True)
                         
-                # 3. 분석 결과 처리(tutor_question 시작되기 전 발생)
+                # 3. knowledge 노드 완료 시 최종 메시지 수집
+                # (내부에서 Gemini+EXAONE 두 모델이 호출되므로 토큰 스트리밍 대신 chain_end에서 처리)
+                elif kind == "on_chain_end" and event["name"] == "knowledge":
+                    output = event["data"].get("output", {})
+                    if isinstance(output, dict) and "messages" in output:
+                        msgs = output["messages"]
+                        if msgs:
+                            last_msg = msgs[-1]
+                            accumulated_text = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
+                            yield f'event: token\ndata: {json.dumps({"text": accumulated_text}, ensure_ascii=False)}\n\n'
+
+                # 4. 분석 결과 처리(tutor_question 시작되기 전 발생)
                 elif kind == "on_chain_end" and event["name"] == "analyze_answer":
                     print("\n[Analysis Complete]")
                     output = event["data"]["output"]
@@ -276,11 +290,13 @@ class ChatBotService:
             
             actual_redis_key = history.key  # RedisChatMessageHistory 인스턴스가 실제로 사용하는 키 확인
 
+            is_correct_result = self.workflow_status[run_id].get("is_correct", False)
             result1 = history.add_message(HumanMessage(
                 content=request.user_message,
                 additional_kwargs={
                     "run_id" : request.run_id,
-                    "paragraph_type": initial_state["paragraph_type"]
+                    "paragraph_type": initial_state["paragraph_type"],
+                    "is_correct": is_correct_result,
                 }
             ))
             result2 = history.add_message(AIMessage(

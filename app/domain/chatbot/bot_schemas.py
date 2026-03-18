@@ -10,7 +10,7 @@ class AnswerGuide(BaseModel):
     
 class UserMsgCreateReq(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel)
-    
+
     user_id : int
     problem_id : int
     run_id : int
@@ -18,6 +18,7 @@ class UserMsgCreateReq(BaseModel):
     session_id : str
     paragraph_type : str
     user_level : str
+    message_type : str = "ANSWER"  # "ANSWER" | "QUESTION"
     
 class UserMsgCreateRes(BaseModel):
     model_config = ConfigDict(
