@@ -28,3 +28,8 @@ ENV/
 
 # 5. Qdrant 로컬 벡터 DB 저장소 (개발 환경)
 qdrant_storage/
+
+# 6. 모델 테스트 파일 & 문제 구조화 파일 
+app/qdrant/nested_json/
+app/qdrant/v2_nested_json_2/
+app/scripts/model_test/
