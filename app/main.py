@@ -32,11 +32,10 @@ async def lifespan(app: FastAPI):
     global _mcp_process
 
     setup_logging()
-    print(f"서버 시작! Qdrant({settings.QDRANT_HOST}) 연결 체크 중...")  
+    print(f"서버 시작! Qdrant({settings.QDRANT_HOST}) 연결 체크 중..")  
       
     client = QdrantClient(
-        host=settings.QDRANT_HOST,
-        port=settings.QDRANT_PORT,
+        url=os.getenv("QDRANT_URL"), https=False,
         api_key=settings.QDRANT_API_KEY if settings.QDRANT_API_KEY else None,
     )
     if not client.collection_exists(settings.COLLECTION_NAME):

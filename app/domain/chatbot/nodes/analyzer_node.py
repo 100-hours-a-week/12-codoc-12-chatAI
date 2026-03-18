@@ -83,7 +83,7 @@ async def analyzer_node(state: ChatBotState) -> dict:
         """
         
     # 1. 분석용 체인 구성 (JSON 출력 강제)
-    chain = ANALYZER_PROMPT | llm | JsonOutputParser()
+    chain = ANALYZER_PROMPT | chatbot | JsonOutputParser()
     
     # ainvoke에 전달할 공통 인자 설정
     invoke_params = {

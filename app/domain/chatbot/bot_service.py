@@ -255,7 +255,18 @@ class ChatBotService:
                         elif node_name == "analyze_answer":
                             print(f"\033[94m[Analyzer Log]\033[0m {token}", end="", flush=True)
                         
-                # 3. 분석 결과 처리(tutor_question 시작되기 전 발생)
+                # 3. knowledge 노드 완료 시 최종 메시지 수집
+                # (내부에서 Gemini+EXAONE 두 모델이 호출되므로 토큰 스트리밍 대신 chain_end에서 처리)
+                elif kind == "on_chain_end" and event["name"] == "knowledge":
+                    output = event["data"].get("output", {})
+                    if isinstance(output, dict) and "messages" in output:
+                        msgs = output["messages"]
+                        if msgs:
+                            last_msg = msgs[-1]
+                            accumulated_text = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
+                            yield f'event: token\ndata: {json.dumps({"text": accumulated_text}, ensure_ascii=False)}\n\n'
+
+                # 4. 분석 결과 처리(tutor_question 시작되기 전 발생)
                 elif kind == "on_chain_end" and event["name"] == "analyze_answer":
                     print("\n[Analysis Complete]")
                     output = event["data"]["output"]
