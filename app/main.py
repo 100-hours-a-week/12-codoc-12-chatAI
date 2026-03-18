@@ -31,6 +31,7 @@ _mcp_process: asyncio.subprocess.Process | None = None
 async def lifespan(app: FastAPI):
     global _mcp_process
 
+    
     setup_logging()
     print(f"서버 시작! Qdrant({settings.QDRANT_HOST}) 연결 체크 중..")  
       
