@@ -219,9 +219,10 @@ class ChatBotService:
         }
         
         accumulated_text = ""
-        
+        knowledge_streamed = False  # knowledge 노드에서 EXAONE 토큰 스트리밍 여부 추적
+
         try:
-            
+
             async for event in chatbot_graph.astream_events(
                 initial_state, 
                 version="v2",
@@ -242,7 +243,7 @@ class ChatBotService:
                 elif kind == "on_chain_start" and event["name"] == "finalizer":
                     yield f'event: status\ndata: {json.dumps({"paragraph_type": "COMPLETED", "status": "PROCESSING"}, ensure_ascii=False)}\n\n'
 
-                # 2. 토큰 스트리밍 (Tutor/Finalizer는 유저에게, Analyzer는 로그로)
+                # 2. 토큰 스트리밍 (Tutor/Finalizer/Knowledge-EXAONE는 유저에게, Analyzer는 로그로)
                 elif kind == "on_chat_model_stream":
                     content = event["data"].get("chunk", None)
                     if content and hasattr(content, 'content'):
@@ -251,20 +252,27 @@ class ChatBotService:
                         if node_name in ("tutor_question", "finalizer"):
                             accumulated_text += token
                             yield f'event: token\ndata: {json.dumps({"text": token}, ensure_ascii=False)}\n\n'
+                        # knowledge 노드에서 EXAONE(ChatOpenAI) 토큰만 스트리밍 (Gemini ReAct 제외)
+                        elif node_name == "knowledge" and event["name"] == "ChatOpenAI":
+                            accumulated_text += token
+                            knowledge_streamed = True
+                            yield f'event: token\ndata: {json.dumps({"text": token}, ensure_ascii=False)}\n\n'
                         # 분석 노드의 로그는 서버 콘솔에만 기록
                         elif node_name == "analyze_answer":
                             print(f"\033[94m[Analyzer Log]\033[0m {token}", end="", flush=True)
-                        
-                # 3. knowledge 노드 완료 시 최종 메시지 수집
-                # (내부에서 Gemini+EXAONE 두 모델이 호출되므로 토큰 스트리밍 대신 chain_end에서 처리)
+
+                # 3. knowledge 노드 완료 처리
+                # EXAONE 토큰 스트리밍이 된 경우는 패스, 툴 미호출로 Gemini 폴백 사용 시에만 한 번에 전송
                 elif kind == "on_chain_end" and event["name"] == "knowledge":
-                    output = event["data"].get("output", {})
-                    if isinstance(output, dict) and "messages" in output:
-                        msgs = output["messages"]
-                        if msgs:
-                            last_msg = msgs[-1]
-                            accumulated_text = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
-                            yield f'event: token\ndata: {json.dumps({"text": accumulated_text}, ensure_ascii=False)}\n\n'
+                    if not knowledge_streamed:
+                        output = event["data"].get("output", {})
+                        if isinstance(output, dict) and "messages" in output:
+                            msgs = output["messages"]
+                            if msgs:
+                                last_msg = msgs[-1]
+                                accumulated_text = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
+                                yield f'event: token\ndata: {json.dumps({"text": accumulated_text}, ensure_ascii=False)}\n\n'
+                    knowledge_streamed = False  # 다음 knowledge 노드 호출을 위해 초기화
 
                 # 4. 분석 결과 처리(tutor_question 시작되기 전 발생)
                 elif kind == "on_chain_end" and event["name"] == "analyze_answer":
