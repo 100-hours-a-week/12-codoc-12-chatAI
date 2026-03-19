@@ -47,6 +47,26 @@ REQUESTS_IN_PROGRESS = Gauge(
     "Gauge of requests by method and path currently being processed.",
     ["method", "path", "app_name"],
 )
+LLM_TTFT = Histogram(
+    "codoc_llm_ttft_seconds",
+    "Time to first token for streaming LLM responses.",
+    ["route", "model", "status", "app_name"],
+)
+LLM_TPS = Histogram(
+    "codoc_llm_tokens_per_second",
+    "Streaming throughput in tokens per second after first token.",
+    ["route", "model", "status", "app_name"],
+)
+LLM_TPOT = Histogram(
+    "codoc_llm_tpot_seconds",
+    "Time per output token after first token.",
+    ["route", "model", "status", "app_name"],
+)
+LLM_TOTAL_LATENCY = Histogram(
+    "codoc_llm_total_latency_seconds",
+    "Total latency for LLM-backed responses.",
+    ["route", "model", "status", "app_name"],
+)
 
 
 class PrometheusMiddleware(BaseHTTPMiddleware):
@@ -122,6 +142,32 @@ def record_exception_metric(request: Request, exc: BaseException, app_name: str)
         exception_type=type(exc).__name__,
         app_name=app_name,
     ).inc()
+
+
+def record_llm_stream_metrics(
+    *,
+    route: str,
+    model: str,
+    app_name: str,
+    status: str,
+    ttft_seconds: float | None,
+    tokens_per_second: float | None,
+    tpot_seconds: float | None,
+    total_latency_seconds: float,
+) -> None:
+    labels = {
+        "route": route,
+        "model": model,
+        "status": status,
+        "app_name": app_name,
+    }
+    if ttft_seconds is not None:
+        LLM_TTFT.labels(**labels).observe(ttft_seconds)
+    if tokens_per_second is not None:
+        LLM_TPS.labels(**labels).observe(tokens_per_second)
+    if tpot_seconds is not None:
+        LLM_TPOT.labels(**labels).observe(tpot_seconds)
+    LLM_TOTAL_LATENCY.labels(**labels).observe(total_latency_seconds)
 
 
 def metrics(_: Request) -> Response:

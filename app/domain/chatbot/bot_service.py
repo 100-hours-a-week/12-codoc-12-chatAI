@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import time
 import uuid
@@ -9,16 +10,20 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langchain_community.chat_message_histories import RedisChatMessageHistory
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.prompts import ChatPromptTemplate
-from app.common.config import llm
+from app.common.config import llm, settings
 from qdrant_client.http import models
 from qdrant_client import QdrantClient
 
 from langfuse import Langfuse
 langfuse_client = Langfuse()
 
+from app.observability import record_llm_stream_metrics
 from .graph_builder import chatbot_graph
 from .bot_schemas import UserMsgCreateReq, UserMsgCreateRes
 from .bot_state import ChatBotState
+
+logger = logging.getLogger(__name__)
+
 
 class WorkflowStatus(str, Enum):
     ACCEPTED = "ACCEPTED"
@@ -48,6 +53,15 @@ class ChatBotService:
             api_key=os.getenv("QDRANT_API_KEY", "")
         )
         print("ChatBotService : Embedding Model & Qdrant Client Loaded")
+
+    @staticmethod
+    def _count_completion_tokens(text: str) -> int:
+        if not text:
+            return 0
+        try:
+            return int(chatbot.get_num_tokens(text))
+        except Exception:
+            return max(len(text.split()), 1)
 
     def _ensure_user_memories_collection(self, vector_size: int) -> None:
         collection_name = "User_memories"
@@ -208,6 +222,9 @@ class ChatBotService:
 
         final_data = None
         current_task = asyncio.current_task()
+        request_started_at = time.perf_counter()
+        first_token_at: Optional[float] = None
+        last_token_at: Optional[float] = None
         
         self.workflow_status[run_id] = {
             "status": WorkflowStatus.PROCESSING,
@@ -250,6 +267,11 @@ class ChatBotService:
                         token = content.content
                         # 튜터/파이널라이저 노드의 응답은 클라이언트로 스트리밍
                         if node_name in ("tutor_question", "finalizer"):
+                            now = time.perf_counter()
+                            if token and first_token_at is None:
+                                first_token_at = now
+                            if token:
+                                last_token_at = now
                             accumulated_text += token
                             yield f'event: token\ndata: {json.dumps({"text": token}, ensure_ascii=False)}\n\n'
                         # knowledge 노드에서 EXAONE(ChatOpenAI) 토큰만 스트리밍 (Gemini ReAct 제외)
@@ -358,6 +380,53 @@ class ChatBotService:
             yield f'event: error\ndata: {json.dumps({"code": "FAILED", "message": error_msg}, ensure_ascii=False)}\n\n'
             
         finally:
+            total_latency_seconds = max(time.perf_counter() - request_started_at, 0.0)
+            completion_tokens = self._count_completion_tokens(accumulated_text)
+            generation_window_seconds = None
+            if first_token_at is not None:
+                generation_window_seconds = max((last_token_at or first_token_at) - first_token_at, 0.0)
+
+            ttft_seconds = None
+            if first_token_at is not None:
+                ttft_seconds = max(first_token_at - request_started_at, 0.0)
+
+            tokens_per_second = None
+            if generation_window_seconds and generation_window_seconds > 0 and completion_tokens > 0:
+                tokens_per_second = completion_tokens / generation_window_seconds
+
+            tpot_seconds = None
+            if generation_window_seconds is not None and completion_tokens > 0:
+                tpot_seconds = generation_window_seconds / completion_tokens
+
+            status = "completed"
+            run_info = self.workflow_status.get(run_id)
+            if run_info and run_info.get("status") == WorkflowStatus.CANCELED:
+                status = "canceled"
+            elif run_info and run_info.get("status") == WorkflowStatus.FAILED:
+                status = "failed"
+
+            record_llm_stream_metrics(
+                route="/api/v2/chatbot",
+                model=settings.CHATBOT_MODEL_NAME,
+                app_name=os.getenv("APP_NAME", "app-chatai"),
+                status=status,
+                ttft_seconds=ttft_seconds,
+                tokens_per_second=tokens_per_second,
+                tpot_seconds=tpot_seconds,
+                total_latency_seconds=total_latency_seconds,
+            )
+            logger.info(
+                "event=llm_stream_metrics route=%s model=%s status=%s trace_id=%s completion_tokens=%s ttft_ms=%.2f total_latency_ms=%.2f tps=%s tpot_ms=%s",
+                "/api/v2/chatbot",
+                settings.CHATBOT_MODEL_NAME,
+                status,
+                trace_id or "",
+                completion_tokens,
+                (ttft_seconds or 0.0) * 1000,
+                total_latency_seconds * 1000,
+                f"{tokens_per_second:.4f}" if tokens_per_second is not None else "",
+                f"{tpot_seconds * 1000:.4f}" if tpot_seconds is not None else "",
+            )
             print(f"🏁 [Finally] Text Length: {len(accumulated_text)} / Trace ID: {trace_id}")
             
             if trace_id:
