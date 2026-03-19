@@ -70,7 +70,7 @@ jobs:
               "export HOST_PORT='8000'",
               "export APP_PORT='8000'",
               "export HEALTH_PATH='/'",
-              "export APP_ENV_PATH='/home/ubuntu/app/.env'",
+              "export APP_ENV_PATH='/home/ubuntu/codoc/chat-ai.env'",
               "export APP_ENV_CONTENT_BASE64='${APP_ENV_CONTENT_BASE64}'",
               "nohup bash '${DEV_DEPLOY_SCRIPT_PATH}' > /home/ubuntu/codoc/logs/chat-dev-deploy.log 2>&1 < /dev/null &",
               "echo started"

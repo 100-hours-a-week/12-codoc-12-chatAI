@@ -1,6 +1,6 @@
 from app.domain.chatbot.bot_state import ChatBotState
 from app.domain.chatbot.prompts import PROMPTS
-from app.common.config import chatbot
+from app.common.config import chatbot, llm
 import asyncio
 
 async def tutor_node(state: ChatBotState) -> dict:
