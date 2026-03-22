@@ -55,8 +55,9 @@ async def expire_session(
 ):
     background_tasks.add_task(
         bot_service.from_redis_to_user_memories,
-        session_id=post.session_id, 
-        user_id=post.user_id, 
-        problem_id=post.problem_id
+        session_id=post.session_id,
+        user_id=post.user_id,
+        problem_id=post.problem_id,
+        user_level=post.user_level,
     )
     return CommonResponse.success_response(message="세션이 만료되어 Redis에서 User Memories로 이동하는 작업이 백그라운드에서 처리됩니다.")

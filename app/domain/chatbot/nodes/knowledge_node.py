@@ -2,13 +2,14 @@ import os
 import asyncio
 from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
 from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_mcp_adapters.tools import load_mcp_tools
 from langchain.agents import create_agent
 
 from app.domain.chatbot.bot_state import ChatBotState
 from app.domain.chatbot.prompts import KNOWLEDGE_SYSTEM_PROMPT, KNOWLEDGE_SYNTHESIS_PROMPT
 from app.common.config import llm, chatbot
 
-MCP_SERVER_URL = os.getenv("MCP_SERVER_URL", "http://localhost:8001")
+MCP_SERVER_URL = os.getenv("MCP_SERVER_URL", "http://127.0.0.1:8001")
 
 
 async def _run_agent(llm, tools, system_prompt, messages):
@@ -58,9 +59,10 @@ async def knowledge_node(state: ChatBotState) -> dict:
                 }
             }
         )
-        tools = await mcp_client.get_tools()
-        print(f"📦 [Knowledge] 로드된 MCP 툴 ({len(tools)}개): {[t.name for t in tools]}")
-        return await _run_agent(llm, tools, system_prompt, state["messages"])
+        async with mcp_client.session("codoc") as session:
+            tools = await load_mcp_tools(session)
+            print(f"📦 [Knowledge] 로드된 MCP 툴 ({len(tools)}개): {[t.name for t in tools]}")
+            return await _run_agent(llm, tools, system_prompt, state["messages"])
 
     try:
         result = await run_with_client()
@@ -70,7 +72,11 @@ async def knowledge_node(state: ChatBotState) -> dict:
             await asyncio.sleep(2.5)
             result = await run_with_client()
         else:
-            print(f"❌ [Knowledge] 예상치 못한 에러: {e}")
+            # ExceptionGroup(TaskGroup 내부 에러)의 실제 원인 출력
+            if hasattr(e, 'exceptions'):
+                for i, sub_e in enumerate(e.exceptions):
+                    print(f"❌ [Knowledge] Sub-exception[{i}]: {type(sub_e).__name__}: {sub_e}")
+            print(f"❌ [Knowledge] 예상치 못한 에러: {type(e).__name__}: {e}")
             raise e
 
     # ── Step 2: 툴 결과를 EXAONE에게 넘겨 최종 답변 생성 ──────────────────────

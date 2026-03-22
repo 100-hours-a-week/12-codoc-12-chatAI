@@ -31,10 +31,11 @@ class UserMsgCreateRes(BaseModel):
     
 class ExpireSessionReq(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel)
-    
+
     session_id : str
     user_id : int
     problem_id : int
+    user_level : str
     
 class ExpireSessionRes(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel)
