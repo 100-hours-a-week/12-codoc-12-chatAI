@@ -85,48 +85,91 @@ async def retrieve_paragraph(problem_id: int, paragraph_type: str) -> str:
         return f"힌트 조회 중 오류가 발생했습니다: {e}"
 
 
-# ── 내부 툴 2: 알고리즘/자료구조 개념 (유사도 검색) ────────────────────────────
+# ── 내부 툴 2: 알고리즘/자료구조 개념 (문제 맥락 + 유사도 검색) ────────────────
 @mcp.tool()
-async def retrieve_concept(query: str) -> str:
+async def retrieve_concept(query: str, problem_id: int, current_node: str) -> str:
     """
-    Algo_concepts 컬렉션에서 유사도 검색으로 알고리즘/자료구조 개념을 가져옵니다.
+    현재 유저가 풀고 있는 문제·문단의 맥락을 Problems 컬렉션에서 조회하고,
+    Algo_Concepts 컬렉션에서 유사도 검색으로 알고리즘/자료구조 개념을 가져옵니다.
     유저가 특정 개념(BFS, DFS, DP, 스택, 큐 등)에 대해 헷갈려할 때 사용하세요.
+    반드시 이 툴 호출 후 web_search도 연이어 호출하여 외부 참고 자료를 함께 제공하세요.
 
     Args:
         query: 검색할 개념 설명 또는 질문 (예: "BFS로 최단경로 구하는 방법", "DP 메모이제이션이란")
+        problem_id: 현재 유저가 풀고 있는 문제 ID
+        current_node: 현재 풀고 있는 문단 (BACKGROUND, GOAL, STRATEGY, INSIGHT 중 하나)
     """
+    sections = []
+    problem_tags = []
+
+    # ── Part 1: Problems 컬렉션에서 현재 문제·문단 맥락 + tags 조회 ───────────
     try:
-        # Algo_Concepts 컬렉션 존재 여부 확인
+        problem_results, _ = _qdrant.scroll(
+            collection_name="Problems",
+            scroll_filter=qdrant_models.Filter(
+                must=[
+                    qdrant_models.FieldCondition(
+                        key="problem_id",
+                        match=qdrant_models.MatchValue(value=problem_id),
+                    ),
+                    qdrant_models.FieldCondition(
+                        key="paragraph_type",
+                        match=qdrant_models.MatchValue(value=current_node),
+                    ),
+                ]
+            ),
+            limit=1,
+            with_payload=True,
+        )
+        if problem_results:
+            payload = problem_results[0].payload
+            summary = payload.get("essential_summary", "")
+            guide = payload.get("chatbot_answer_guide", "")
+            problem_tags = payload.get("tags", [])
+            context_lines = [f"[현재 문제 맥락 - {current_node} 단계]"]
+            if problem_tags:
+                context_lines.append(f"관련 알고리즘 태그: {', '.join(problem_tags)}")
+            if summary:
+                context_lines.append(f"핵심 요약: {summary}")
+            if guide:
+                context_lines.append(f"답변 가이드: {guide}")
+            sections.append("\n".join(context_lines))
+    except Exception as e:
+        sections.append(f"[문제 맥락 조회 오류] {e}")
+
+    # ── Part 2: Algo_Concepts 유사도 검색 (tags 우선, 없으면 query 사용) ────────
+    try:
         collections = [c.name for c in _qdrant.get_collections().collections]
         if "Algo_Concepts" not in collections:
-            return (
+            sections.append(
                 "[안내] 개념 데이터베이스가 아직 준비 중입니다.\n"
                 f"'{query}'에 대해서는 제가 직접 설명드릴게요."
             )
-
-        # 쿼리 임베딩 후 유사도 검색
-        query_vector = _embeddings.embed_query(query)
-        results = _qdrant.search(
-            collection_name="Algo_Concepts",
-            query_vector=query_vector,
-            limit=3,
-            with_payload=True,
-            score_threshold=0.5,  # 유사도 임계값: 너무 관련없는 문서 제외
-        )
-
-        if not results:
-            return f"'{query}'와 관련된 개념 문서를 찾지 못했습니다."
-
-        docs = []
-        for r in results:
-            title = r.payload.get("title", "")
-            content = r.payload.get("content", "")
-            score = round(r.score, 3)
-            docs.append(f"## {title} (유사도: {score})\n{content}")
-
-        return "\n\n---\n\n".join(docs)
+        else:
+            # tags가 있으면 tags를 검색 키워드로 우선 사용, 없으면 유저 query 사용
+            search_query = " ".join(problem_tags) if problem_tags else query
+            query_vector = _embeddings.embed_query(search_query)
+            results = _qdrant.search(
+                collection_name="Algo_Concepts",
+                query_vector=query_vector,
+                limit=3,
+                with_payload=True,
+                score_threshold=0.5,
+            )
+            if results:
+                docs = []
+                for r in results:
+                    title = r.payload.get("title", "")
+                    content = r.payload.get("content", "")
+                    score = round(r.score, 3)
+                    docs.append(f"## {title} (유사도: {score})\n{content}")
+                sections.append("[개념 DB 검색 결과]\n\n" + "\n\n---\n\n".join(docs))
+            else:
+                sections.append(f"[개념 DB] '{search_query}'와 관련된 개념 문서를 찾지 못했습니다.")
     except Exception as e:
-        return f"개념 조회 중 오류가 발생했습니다: {e}"
+        sections.append(f"[개념 DB 조회 오류] {e}")
+
+    return "\n\n========\n\n".join(sections) if sections else "조회 결과가 없습니다."
 
 
 # ── 내부 툴 3: 유저 학습 히스토리 ──────────────────────────────────────────────

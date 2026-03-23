@@ -5,7 +5,8 @@ from datetime import datetime, timezone
 from logging.handlers import TimedRotatingFileHandler
 
 
-LOG_DIR = "/home/ubuntu/ai/logs"
+LOG_DIR = os.getenv("LOG_DIR", "/home/ubuntu/ai/logs")
+
 TEXT_LOG_PATH = os.path.join(LOG_DIR, "app.log")
 JSON_LOG_PATH = os.path.join(LOG_DIR, "app.json.log")
 

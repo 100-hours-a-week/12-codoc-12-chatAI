@@ -93,69 +93,230 @@ class ChatBotService:
                 return
             raise
         
-    async def from_redis_to_user_memories(self, user_id, problem_id, session_id):
+    async def _fetch_mysql_weak_data(self, user_id: int, problem_id: int) -> tuple[list, list, list]:
+        """MySQL에서 틀린 퀴즈 유형(weak_tags), 틀린 요약카드 문단(error_paragraph), 최근 풀이 문제(recent_solved_ids) 조회"""
+        import aiomysql
+
+        mysql_host = os.getenv("MYSQL_HOST")
+        mysql_port = int(os.getenv("MYSQL_PORT", "3306"))
+        mysql_user = os.getenv("MYSQL_USER")
+        mysql_pass = os.getenv("MYSQL_PASSWORD")
+        mysql_db   = os.getenv("MYSQL_DB")
+
+        if not all([mysql_host, mysql_user, mysql_pass, mysql_db]):
+            raise ValueError("MySQL 환경변수(MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB)가 설정되지 않았습니다.")
+
+        conn = await aiomysql.connect(
+            host=mysql_host, port=mysql_port,
+            user=mysql_user, password=mysql_pass,
+            db=mysql_db, charset="utf8mb4", autocommit=True
+        )
+        try:
+            async with conn.cursor() as cur:
+                # 틀린 quiz_type → weak_tags
+                await cur.execute("""
+                    SELECT DISTINCT q.quiz_type
+                    FROM user_quiz_result uqr
+                    JOIN user_quiz_attempt uqa ON uqr.attempt_id = uqa.id
+                    JOIN quiz q ON uqr.quiz_id = q.id
+                    WHERE uqa.user_id = %s AND uqa.problem_id = %s AND uqr.is_correct = 0
+                """, (user_id, problem_id))
+                weak_tags = [row[0] for row in await cur.fetchall()]
+
+                # 틀린 paragraph_type → error_paragraph
+                await cur.execute("""
+                    SELECT DISTINCT sc.paragraph_type
+                    FROM summary_card_submission scs
+                    JOIN summary_card_attempt sca ON scs.attempt_id = sca.id
+                    JOIN problem_session ps ON sca.problem_session_id = ps.id
+                    JOIN summary_card sc ON scs.summary_card_id = sc.id
+                    WHERE ps.user_id = %s AND ps.problem_id = %s AND scs.is_correct = 0
+                """, (user_id, problem_id))
+                error_paragraph = [row[0] for row in await cur.fetchall()]
+
+                # 최근 풀이 문제 ID → recent_solved_ids
+                await cur.execute("""
+                    SELECT problem_id
+                    FROM user_problem_result
+                    WHERE user_id = %s AND STATUS = 'SOLVED'
+                    ORDER BY created_at DESC
+                    LIMIT 10
+                """, (user_id,))
+                recent_solved_ids = [row[0] for row in await cur.fetchall()]
+        finally:
+            conn.close()
+
+        return weak_tags, error_paragraph, recent_solved_ids
+
+    def _get_graph_info_from_algo_concepts(self, weak_tags: list) -> tuple[list, list]:
+        """weak_tags로 Algo_Concepts 컬렉션 벡터 검색 → graph_tags, graph_edge 추출"""
+        if not weak_tags:
+            return [], []
+
+        query_text = " ".join(weak_tags)
+        vector = self.embeddings.embed_query(query_text)
+
+        try:
+            results = self.qdrant_client.search(
+                collection_name="Algo_Concepts",
+                query_vector=vector,
+                limit=3,
+                with_payload=True
+            )
+        except Exception as e:
+            print(f"[Algo_Concepts] 벡터 검색 실패: {e}")
+            return [], []
+
+        graph_tags = []
+        graph_edge_set = set()
+        for hit in results:
+            payload = hit.payload or {}
+            concept = payload.get("concept")
+            if concept:
+                graph_tags.append(concept)
+            for c in payload.get("related_concepts", []):
+                graph_edge_set.add(c)
+            for c in payload.get("parent_concepts", []):
+                graph_edge_set.add(c)
+
+        return graph_tags, list(graph_edge_set)
+
+    async def _save_to_user_memories(self, user_id, problem_id, session_id, payload: dict) -> None:
+        """payload를 임베딩하여 Qdrant User_memories에 저장. point_id = uuid5(user_id:problem_id:session_id)"""
+        point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{user_id}:{problem_id}:{session_id}"))
+        vector = self.embeddings.embed_query(payload.get("error_summary", ""))
+        self._ensure_user_memories_collection(vector_size=len(vector))
+        self.qdrant_client.upsert(
+            collection_name="User_memories",
+            points=[
+                models.PointStruct(
+                    id=point_id,
+                    vector=vector,
+                    payload=payload
+                )
+            ]
+        )
+        print(f"[User_Memories] 저장 완료 (user_id: {user_id}, problem_id: {problem_id}, point_id: {point_id})")
+
+    async def from_redis_to_user_memories(self, user_id, problem_id, session_id, user_level):
         print(f"🔔 [Event] 세션 만료 알림 수신: {session_id}")
-        
+
         redis_history_key = f"ai:chatbot:user:{user_id}:problem:{problem_id}:{session_id}"
         history = RedisChatMessageHistory(session_id=redis_history_key, url=self.redis_url)
         messages = history.messages
-        
-        if len(messages) < 2 : return
-        
+
+        # ── 챗봇 미사용 경로: MySQL에서 퀴즈/요약카드 오답 데이터로 User_memories 생성 ──
+        if len(messages) < 2:
+            print(f"[User_Memories] 챗봇 대화 없음 → MySQL 오답 데이터로 대체 저장 시도 (user_id: {user_id})")
+            try:
+                weak_tags, error_paragraph, recent_solved_ids = await self._fetch_mysql_weak_data(user_id, problem_id)
+
+                if not weak_tags and not error_paragraph:
+                    print("[User_Memories] MySQL에도 오답 데이터 없음 → 저장 생략")
+                    return
+
+                # error_summary: 오답 데이터 기반 LLM 프롬프팅
+                summary_prompt = ChatPromptTemplate.from_template(
+                    "당신은 학생의 학습 상태를 분석하는 전문가입니다.\n"
+                    "아래 정보를 바탕으로 학생의 취약점 요약을 2-3줄로 작성하세요.\n\n"
+                    "틀린 퀴즈 유형: {weak_tags}\n"
+                    "틀린 요약카드 문단: {error_paragraph}\n\n"
+                    "JSON 형식으로만 응답하세요:\n"
+                    '{{"error_summary": "..."}}'
+                )
+                chain = summary_prompt | llm
+                response = await chain.ainvoke({
+                    "weak_tags": weak_tags,
+                    "error_paragraph": error_paragraph
+                })
+                raw = response.content.replace("```json", "").replace("```", "").strip()
+                error_summary = json.loads(raw).get("error_summary", "")
+
+                graph_tags, graph_edge = self._get_graph_info_from_algo_concepts(weak_tags)
+
+                payload = {
+                    "user_id": user_id,
+                    "problem_id": problem_id,
+                    "session_id": session_id,
+                    "user_level": user_level,
+                    "error_summary": error_summary,
+                    "recent_solved_ids": recent_solved_ids,
+                    "weak_tags": weak_tags,
+                    "error_paragraph": error_paragraph,
+                    "graph_tags": graph_tags,
+                    "graph_edge": graph_edge,
+                    "metric_source": None,
+                    "metric": None,
+                    "scores": {
+                        "accuracy_score": 0,
+                        "independence_score": 0,
+                        "speed_score": 0,
+                        "consistency_score": 0
+                    },
+                    "created_at": int(time.time())
+                }
+                await self._save_to_user_memories(user_id, problem_id, session_id, payload)
+
+            except Exception as e:
+                print(f"[User_Memories] MySQL 대체 저장 실패: {e}")
+            return
+
+        # ── 챗봇 사용 경로: 대화 내역 기반 LLM 추출 + MySQL recent_solved_ids ──
         chat_text = "\n".join([f"{'User' if isinstance(m, HumanMessage) else 'AI'}: {m.content}" for m in messages])
-        
+
+        try:
+            _, _, recent_solved_ids = await self._fetch_mysql_weak_data(user_id, problem_id)
+        except Exception as e:
+            print(f"[User_Memories] recent_solved_ids 조회 실패, 빈 리스트로 대체: {e}")
+            recent_solved_ids = []
+
         extract_prompt = ChatPromptTemplate.from_template(
             "당신은 학생의 학습 상태를 분석하는 전문가입니다. 아래 대화 내역을 분석하여 JSON 형식으로만 응답하세요.\n\n"
             "대화 내용:\n{chat_history}\n\n"
             "다음 필드를 포함한 JSON을 생성하세요:\n"
             "1. error_summary: 학생의 취약점이나 실수에 대한 한 줄 요약 (2-3줄 가능)\n"
-            "2. weak_tags: 학생이 어려워하는 개념 알고리즘이나 자료구조 리스트 (예: ['DFS', '시간복잡도'])\n"
+            "2. weak_tags: 학생이 어려워하는 개념 리스트. 반드시 아래 허용된 태그 목록 안에서만 선택하세요.\n"
+            "   [허용 태그] 수학, 구현, 다이나믹 프로그래밍, 집합과 맵, 해시를 사용한 집합과 맵, 트리를 사용한 집합과 맵, "
+            "세그먼트 트리, 느리게 갱신되는 세그먼트 트리, 분리 집합, 우선순위 큐, 스택, 큐, 희소 배열, 연결 리스트, 덱, "
+            "그래프 이론, 그리디 알고리즘, 문자열, 브루트포스 알고리즘, 정렬, 애드 혹, 트리, 이분 탐색, 해 구성하기, "
+            "누적 합, 많은 조건 분기, 비트마스킹, 기하학, 스위핑, 매개 변수 탐색, 분할 정복, 두 포인터, 재귀, "
+            "슬라이딩 윈도우, 중간에서 만나기, 오프라인 쿼리, 좌표 압축, 해싱, 홀짝성, 제곱근 분할법, 게임 이론, 순열 사이클 분할\n"
             "3. error_paragraph: 요약카드 문단 중 틀린 부분 (BACKGROUND, GOAL, RULE, CONSTRAINT 중 선택)\n"
             "4. graph_tags: 지식 그래프 노드 (예: ['BFS', 'Queue'])\n"
             "5. graph_edge: 지식 간의 관계 정의 (예: ['TIME', 'LOGIC_ERROR'])\n"
             "6. metric: 이번 세션의 가장 강점인 지수 (ACCURACY, INDEPENDENCE, SPEED, CONSISTENCY, REPORT 중 하나)\n"
         )
-        
+
         chain = extract_prompt | llm
         response = await chain.ainvoke({"chat_history": chat_text})
-        
-        raw_content = response.content.replace("```json", "").replace("```", "").strip()   
+
+        raw_content = response.content.replace("```json", "").replace("```", "").strip()
         extracted = json.loads(raw_content)
-        
+
         try:
-            vector = self.embeddings.embed_query(extracted.get("error_summary", ""))
-            self._ensure_user_memories_collection(vector_size=len(vector))
-            
             payload = {
                 "user_id": user_id,
                 "problem_id": problem_id,
-                "error_summary" : extracted.get("error_summary", ""),
-                "weak_tags" : extracted.get("weak_tags", []),
-                "error_paragraph" : extracted.get("error_paragraph", ""),
-                "graph_tags" : extracted.get("graph_tags", []),
-                "graph_edge" : extracted.get("graph_edge", []),
-                "metric" : extracted.get("metric", {}),
-                "scores" : {
-                    "accuracy_score" : 0,
-                    "independence_score" : 0,
-                    "speed_score" : 0,
-                    "consistency_score" : 0
+                "session_id": session_id,
+                "user_level": user_level,
+                "error_summary": extracted.get("error_summary", ""),
+                "recent_solved_ids": recent_solved_ids,
+                "weak_tags": extracted.get("weak_tags", []),
+                "error_paragraph": extracted.get("error_paragraph", ""),
+                "graph_tags": extracted.get("graph_tags", []),
+                "graph_edge": extracted.get("graph_edge", []),
+                "metric_source": None,
+                "metric": extracted.get("metric", None),
+                "scores": {
+                    "accuracy_score": 0,
+                    "independence_score": 0,
+                    "speed_score": 0,
+                    "consistency_score": 0
                 },
                 "created_at": int(time.time())
             }
-            
-            self.qdrant_client.upsert(
-                collection_name="User_memories",
-                points=[
-                    models.PointStruct(
-                        id=str(uuid.uuid4()),
-                        vector=vector,
-                        payload=payload
-                    )
-                ]
-            )
-            print(f"저장 완료! Timestamp: {payload['created_at']}")
-            print(f"[User_Memories] 저장 완료 (User_Id: {user_id})")
+
+            await self._save_to_user_memories(user_id, problem_id, session_id, payload)
 
             # Qdrant 저장 성공 후에만 Redis 세션 히스토리 삭제
             try:
@@ -165,7 +326,7 @@ class ChatBotService:
                 print(f"[Redis] history.clear() 실패, direct delete 시도: {clear_error}")
                 delete_result = history.redis_client.delete(history.key)
                 print(f"[Redis] direct delete result: {delete_result} (key: {history.key})")
-            
+
         except Exception as e:
             print(f"저장 실패 : {e}")
 
