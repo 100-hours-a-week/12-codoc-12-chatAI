@@ -138,7 +138,7 @@ class ChatBotService:
                 await cur.execute("""
                     SELECT problem_id
                     FROM user_problem_result
-                    WHERE user_id = %s
+                    WHERE user_id = %s AND STATUS = 'SOLVED'
                     ORDER BY created_at DESC
                     LIMIT 10
                 """, (user_id,))
