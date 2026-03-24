@@ -1,6 +1,12 @@
 version: '3.8'
 
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    restart: always
   qdrant:
     image: qdrant/qdrant
     container_name: qdrant_db
@@ -19,5 +25,6 @@ services:
       - "8000:8000"
     depends_on:
       - qdrant
+      - redis
     env_file:
       - .env  
