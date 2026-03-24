@@ -29,3 +29,6 @@ class ChatBotState(TypedDict):
     # 5. 상태 판단 필드
     is_correct: bool           # 정답 여부
     analyzer_reason: Optional[str]  # 정답 판단 이유 (analyzer_node에서 설정)
+
+    # 6. 유저 학습 기억 (Qdrant User_memories)
+    user_memory: Optional[dict]  # weak_tags, error_paragraph, error_summary

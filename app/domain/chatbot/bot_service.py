@@ -330,6 +330,37 @@ class ChatBotService:
         except Exception as e:
             print(f"저장 실패 : {e}")
 
+    async def _fetch_user_memories(self, user_id: int) -> Optional[dict]:
+        """Qdrant User_memories에서 유저의 최근 1주일 학습 기억 조회"""
+        try:
+            one_week_ago = int(time.time()) - 7 * 24 * 3600
+            results, _ = self.qdrant_client.scroll(
+                collection_name="User_memories",
+                scroll_filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="user_id",
+                            match=models.MatchValue(value=user_id),
+                        ),
+                        models.FieldCondition(
+                            key="created_at",
+                            range=models.Range(gte=one_week_ago),
+                        ),
+                    ]
+                ),
+                limit=5,
+                with_payload=True,
+                with_vectors=False,
+            )
+            if not results:
+                return None
+            latest = max(results, key=lambda r: r.payload.get("created_at", 0))
+            print(f"[User_Memories] 최근 1주일 학습 기억 로드 완료 (user_id: {user_id})")
+            return latest.payload
+        except Exception as e:
+            print(f"[User_Memories] 조회 실패 (user_id: {user_id}): {e}")
+            return None
+
     def cancel_run(self, run_id: int) -> bool:
         run_info = self.workflow_status.get(run_id)
         if not run_info:
@@ -369,6 +400,8 @@ class ChatBotService:
         print(f"📋 past_messages 개수: {len(past_messages)}")
 
              
+        user_memory = await self._fetch_user_memories(user_id)
+
         initial_state : ChatBotState = {
             "messages": past_messages + [HumanMessage(content=request.user_message)],
             "user_id": request.user_id,
@@ -378,7 +411,8 @@ class ChatBotService:
             "session_id": session_id,
             "message_type": request.message_type,
             "paragraph_type": request.paragraph_type if request.paragraph_type else "BACKGROUND",
-            "is_correct": False
+            "is_correct": False,
+            "user_memory": user_memory,
         }
 
         final_data = None
