@@ -10,7 +10,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langchain_community.chat_message_histories import RedisChatMessageHistory
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.prompts import ChatPromptTemplate
-from app.common.config import llm, settings
+from app.common.config import llm, settings, chatbot
 from qdrant_client.http import models
 from qdrant_client import QdrantClient
 
@@ -399,7 +399,7 @@ class ChatBotService:
         past_messages = all_messages[-10:] if len(all_messages) > 10 else all_messages
         print(f"📋 past_messages 개수: {len(past_messages)}")
 
-             
+        # user_memories 로드 (문맥에 반영)
         user_memory = await self._fetch_user_memories(user_id)
 
         initial_state : ChatBotState = {
@@ -626,8 +626,25 @@ class ChatBotService:
             
             if trace_id:
                 try:
+                    trace = langfuse_client.trace(id=trace_id)
+                    
+                    trace.generation(
+                        name="chatbot-generation",
+                        model=settings.CHATBOT_MODEL_NAME,
+                        usage={
+                            "output": completion_tokens,
+                        },
+                        metadata={
+                            "status": status,
+                            "ttft_seconds": ttft_seconds,
+                            "tokens_per_second": tokens_per_second,
+                            "total_latency_seconds": total_latency_seconds,
+                        },
+                        output=accumulated_text
+                    )
+                            
                     # 전역 클라이언트 사용
-                    langfuse_client.trace(id=trace_id).update(
+                    trace.update(
                         output=final_data if final_data else "No response generated"
                     )
                     langfuse_client.flush() # 전송 강제
